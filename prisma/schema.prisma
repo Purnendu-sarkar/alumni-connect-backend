@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoleName {
+  STUDENT
+  ALUMNI
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum MentorshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COMPLETED
+}
+
+enum JobStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CLOSED
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+model University {
+  id               String             @id @default(cuid())
+  name             String
+  slug             String             @unique
+  domain           String             @unique
+  branding         Json?
+  subscriptionPlan String             @default("free")
+  isActive         Boolean            @default(true)
+  users            User[]
+  refreshTokens    RefreshToken[]
+  connections      Connection[]
+  mentorships      MentorshipRequest[]
+  jobs             Job[]
+  events           Event[]
+  contents         Content[]
+  reports          Report[]
+  mediaAssets      MediaAsset[]
+  adSlots          AdSlot[]
+  analyticsEvents  AnalyticsEvent[]
+  auditLogs        AuditLog[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+model User {
+  id                  String              @id @default(cuid())
+  universityId        String
+  roleId              String
+  name                String
+  email               String              @unique
+  passwordHash        String
+  batch               String?
+  department          String?
+  currentCompany      String?
+  position            String?
+  bio                 String?
+  skills              String[]            @default([])
+  avatarUrl           String?
+  verified            Boolean             @default(false)
+  isActive            Boolean             @default(true)
+  university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
+  role                Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  refreshTokens       RefreshToken[]
+  sentConnections     Connection[]        @relation("ConnectionRequester")
+  receivedConnections Connection[]        @relation("ConnectionRecipient")
+  mentoringRequests   MentorshipRequest[] @relation("Mentor")
+  menteeRequests      MentorshipRequest[] @relation("Mentee")
+  jobsPosted          Job[]               @relation("JobPoster")
+  jobsApproved        Job[]               @relation("JobApprover")
+  jobApplications     JobApplication[]
+  reportsFiled        Report[]            @relation("ReportReporter")
+  eventsCreated       Event[]             @relation("EventCreator")
+  contentsCreated     Content[]           @relation("ContentCreator")
+  mediaUploaded       MediaAsset[]        @relation("MediaUploader")
+  analyticsEvents     AnalyticsEvent[]
+  auditLogs           AuditLog[]          @relation("AuditActor")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([universityId, roleId, verified])
+  @@index([universityId, department, batch])
+  @@index([universityId, currentCompany])
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  name        RoleName     @unique
+  description String?
+  permissions Permission[]
+  users       User[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  roles       Role[]
+  createdAt   DateTime @default(now())
+}
+
+model RefreshToken {
+  id           String     @id
+  tokenHash    String     @unique
+  userId       String
+  universityId String
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([universityId])
+}
+
+model Connection {
+  id          String           @id @default(cuid())
+  universityId String
+  requesterId String
+  recipientId String
+  status      ConnectionStatus @default(PENDING)
+  message     String?
+  respondedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  university  University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  requester   User             @relation("ConnectionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient   User             @relation("ConnectionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, recipientId])
+  @@index([universityId, status, createdAt])
+  @@index([recipientId, status])
+}
+
+model MentorshipRequest {
+  id           String           @id @default(cuid())
+  universityId String
+  mentorId     String
+  menteeId     String
+  goals        String
+  status       MentorshipStatus @default(PENDING)
+  scheduledAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  university   University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  mentor       User             @relation("Mentor", fields: [mentorId], references: [id], onDelete: Cascade)
+  mentee       User             @relation("Mentee", fields: [menteeId], references: [id], onDelete: Cascade)
+
+  @@index([universityId, status])
+  @@index([mentorId, status])
+}
+
+model Job {
+  id           String    @id @default(cuid())
+  universityId String
+  postedById   String
+  approvedById String?
+  title        String
+  description  String
+  company      String
+  location     String?
+  employmentType String?
+  applicationUrl String?
+  applicationEmail String?
+  status       JobStatus @default(PENDING)
+  expiresAt    DateTime?
+  approvedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  postedBy     User      @relation("JobPoster", fields: [postedById], references: [id], onDelete: Restrict)
+  approvedBy   User?     @relation("JobApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  applications JobApplication[]
+
+  @@index([universityId, status, createdAt])
+  @@index([universityId, company])
+}
+
+model JobApplication {
+  id        String   @id @default(cuid())
+  jobId     String
+  applicantId String
+  message   String?
+  createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicant User     @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, applicantId])
+  @@index([applicantId, createdAt])
+}
+
+model Event {
+  id           String     @id @default(cuid())
+  universityId String
+  createdById  String
+  title        String
+  description  String
+  slug         String
+  startsAt     DateTime
+  endsAt       DateTime?
+  location     String?
+  isPublished  Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  createdBy    User       @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  media        MediaAsset[]
+
+  @@unique([universityId, slug])
+  @@index([universityId, startsAt])
+}
+
+model Content {
+  id           String        @id @default(cuid())
+  universityId String
+  createdById  String
+  type         String
+  title        String
+  body         String
+  slug         String
+  status       ContentStatus @default(DRAFT)
+  metaTitle    String?
+  metaDescription String?
+  publishedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  university   University    @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation("ContentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([universityId, slug])
+  @@index([universityId, status, publishedAt])
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  universityId String
+  reportedById String
+  targetType   String
+  targetId     String
+  reason       String
+  status       ReportStatus @default(OPEN)
+  resolution   String?
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  university   University   @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  reportedBy   User         @relation("ReportReporter", fields: [reportedById], references: [id], onDelete: Restrict)
+
+  @@index([universityId, status, createdAt])
+  @@index([targetType, targetId])
+}
+
+model MediaAsset {
+  id           String     @id @default(cuid())
+  universityId String
+  uploadedById String
+  eventId      String?
+  url          String
+  providerKey  String?
+  type         MediaType
+  bytes        Int?
+  createdAt    DateTime   @default(now())
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  uploadedBy   User       @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  event        Event?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([universityId, createdAt])
+  @@index([eventId])
+}
+
+model AdSlot {
+  id           String     @id @default(cuid())
+  universityId String
+  position     String
+  sponsor      String
+  content      Json
+  isActive     Boolean    @default(true)
+  startsAt     DateTime
+  endsAt       DateTime
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+
+  @@index([universityId, position, isActive])
+}
+
+model AnalyticsEvent {
+  id           String     @id @default(cuid())
+  universityId String
+  userId       String?
+  eventType    String
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([universityId, eventType, createdAt])
+}
+
+model AuditLog {
+  id           String     @id @default(cuid())
+  universityId String
+  actorId      String
+  action       String
+  targetType   String?
+  targetId     String?
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  actor        User       @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([universityId, createdAt])
+  @@index([actorId, createdAt])
+}
