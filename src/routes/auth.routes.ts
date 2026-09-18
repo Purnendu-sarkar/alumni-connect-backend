@@ -14,10 +14,18 @@ const authRateLimit = rateLimit({
   message: { success: false, message: 'Too many authentication attempts. Try again later.' },
 });
 
+const refreshRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many session refresh attempts. Try again later.' },
+});
+
 export const authRouter = Router();
 
 authRouter.post('/register', authRateLimit, validate(registerSchema), authController.register);
 authRouter.post('/login', authRateLimit, validate(loginSchema), authController.login);
-authRouter.post('/refresh', authRateLimit, authController.refresh);
+authRouter.post('/refresh', refreshRateLimit, authController.refresh);
 authRouter.post('/logout', authController.logout);
 authRouter.get('/me', authenticate, authController.me);

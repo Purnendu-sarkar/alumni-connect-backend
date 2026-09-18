@@ -12,7 +12,8 @@ export const globalErrorHandler: ErrorRequestHandler = (error, request, response
   if (error instanceof ApiError) {
     apiError = error;
   } else if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-    apiError = ApiError.conflict('A record with one of these values already exists.');
+    const target = Array.isArray(error.meta?.target) ? error.meta.target.join(', ') : '';
+    apiError = ApiError.conflict(target.includes('email') ? 'An account with this email already exists.' : 'A record with one of these values already exists.');
   } else if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
     apiError = ApiError.notFound('Resource');
   } else {

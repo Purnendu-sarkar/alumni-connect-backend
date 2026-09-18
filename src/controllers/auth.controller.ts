@@ -27,7 +27,9 @@ export const authController = {
     writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
     return sendSuccess(response, {
       statusCode: 201,
-      message: 'Account created. Alumni accounts await university verification.',
+      message: session.user.verified
+        ? 'Account created successfully.'
+        : 'Account created. Your profile is awaiting university verification.',
       data: { accessToken: session.accessToken, user: session.user },
     });
   }),
