@@ -8,6 +8,7 @@ import { alumniRouter } from './alumni.routes.js';
 import { authRouter } from './auth.routes.js';
 import { connectionRouter } from './connection.routes.js';
 import { jobRouter } from './job.routes.js';
+import { userRouter } from './user.routes.js';
 
 export const apiRouter = Router();
 
@@ -23,6 +24,7 @@ apiRouter.get(
 );
 
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/users', userRouter);
 apiRouter.use('/alumni', alumniRouter);
 apiRouter.use('/connections', connectionRouter);
 apiRouter.use('/jobs', jobRouter);

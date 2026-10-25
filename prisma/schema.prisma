@@ -15,6 +15,12 @@ enum RoleName {
   SUPER_ADMIN
 }
 
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ConnectionStatus {
   PENDING
   ACCEPTED
@@ -90,9 +96,28 @@ model User {
   currentCompany      String?
   position            String?
   bio                 String?
+  headline            String?
+  studentId           String?
+  currentSemester     String?
+  admissionYear       String?
+  expectedGraduationYear String?
+  graduationYear      String?
+  academicId          String?
+  employmentStatus    String?
+  location            String?
+  phone               String?
+  phonePublic         Boolean             @default(false)
+  linkedinUrl         String?
+  websiteUrl          String?
+  githubUrl           String?
   skills              String[]            @default([])
+  interests           String[]            @default([])
   avatarUrl           String?
   verified            Boolean             @default(false)
+  verificationStatus  VerificationStatus  @default(PENDING)
+  rejectionReason     String?
+  verifiedAt          DateTime?
+  onboardingCompleted Boolean             @default(false)
   isActive            Boolean             @default(true)
   university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
   role                Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
@@ -114,6 +139,8 @@ model User {
   updatedAt           DateTime            @updatedAt
 
   @@index([universityId, roleId, verified])
+  @@index([universityId, verificationStatus])
+  @@index([universityId, roleId, verificationStatus])
   @@index([universityId, department, batch])
   @@index([universityId, currentCompany])
 }

@@ -7,4 +7,5 @@ coverage/
 src/generated/
 logs/
 *.log
+uploads/
 

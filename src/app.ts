@@ -1,3 +1,4 @@
+import path from 'node:path';
 import express, { type RequestHandler, type Request, type Response } from 'express';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -75,6 +76,8 @@ app.get('/', (req: Request, res: Response) => {
     timeStamp: new Date().toUTCString(),
   });
 });
+
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
 app.use('/api/v1', apiRouter);
 app.use(notFoundMiddleware);

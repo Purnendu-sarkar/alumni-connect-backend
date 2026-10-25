@@ -1,3 +1,4 @@
+import { userService } from '../services/user/user.service.js';
 import { userRepository } from '../repositories/user.repository.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { sendSuccess } from '../utils/api-response.js';
@@ -15,5 +16,14 @@ export const alumniController = {
       data: alumni,
       meta: toPageMeta(query.page, query.limit, total),
     });
+  }),
+
+  getById: asyncHandler(async (request, response) => {
+    const alumnus = await userService.getAlumniById(
+      request.params.id as string,
+      request.auth!.universityId,
+      { id: request.auth!.userId, role: request.auth!.role },
+    );
+    return sendSuccess(response, { data: alumnus });
   }),
 };

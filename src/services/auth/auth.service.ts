@@ -17,9 +17,17 @@ interface RegisterInput {
   role: Extract<RoleName, 'STUDENT' | 'ALUMNI'>;
   batch?: string;
   department?: string;
+  studentId?: string;
+  currentSemester?: string;
+  admissionYear?: string;
+  expectedGraduationYear?: string;
+  graduationYear?: string;
+  academicId?: string;
+  employmentStatus?: string;
   currentCompany?: string;
   position?: string;
   skills?: string[];
+  interests?: string[];
 }
 
 function toSafeUser(user: AuthenticatedUserRecord) {
@@ -29,8 +37,14 @@ function toSafeUser(user: AuthenticatedUserRecord) {
     email: user.email,
     role: user.role.name,
     verified: user.verified,
+    verificationStatus: user.verificationStatus,
+    rejectionReason: user.rejectionReason,
+    avatarUrl: user.avatarUrl,
+    department: user.department,
+    batch: user.batch,
     university: {
       id: user.university.id,
+      name: user.university.name,
       slug: user.university.slug,
       domain: user.university.domain,
     },
@@ -120,8 +134,8 @@ export const authService = {
   },
 
   async me(userId: string) {
-    const user = await userRepository.findAuthenticatedById(userId);
-    if (!user || !user.isActive) throw ApiError.unauthorized('This account is unavailable.');
-    return toSafeUser(user);
+    const user = await userRepository.findFullProfileById(userId);
+    if (!user) throw ApiError.unauthorized('This account is unavailable.');
+    return user;
   },
 };
