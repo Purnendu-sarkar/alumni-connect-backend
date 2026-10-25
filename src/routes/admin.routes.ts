@@ -36,3 +36,28 @@ adminRouter.patch(
   validate(userIdParamSchema, 'params'),
   adminController.verifyUser,
 );
+
+// Platform & University Management Endpoints
+adminRouter.get(
+  '/universities',
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  adminController.listUniversities,
+);
+
+adminRouter.post(
+  '/universities',
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  adminController.createUniversity,
+);
+
+adminRouter.patch(
+  '/universities/:id/status',
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  adminController.toggleUniversityStatus,
+);
+
+adminRouter.get(
+  '/stats',
+  adminController.getStats,
+);
+

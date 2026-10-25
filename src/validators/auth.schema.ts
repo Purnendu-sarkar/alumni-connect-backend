@@ -54,3 +54,16 @@ export const loginSchema = z.object({
   email: z.email('Enter a valid email address.').trim().toLowerCase(),
   password: z.string().min(1, 'Enter your password.').max(128),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.email('Enter a valid email address.').trim().toLowerCase(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1, 'Token is required.'),
+  newPassword: passwordSchema,
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().trim().min(1, 'Verification token is required.'),
+});

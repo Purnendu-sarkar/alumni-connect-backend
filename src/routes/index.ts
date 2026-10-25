@@ -29,3 +29,12 @@ apiRouter.use('/alumni', alumniRouter);
 apiRouter.use('/connections', connectionRouter);
 apiRouter.use('/jobs', jobRouter);
 apiRouter.use('/admin', adminRouter);
+
+// Removable Development Demo Module: gracefully mounts when present and enabled
+try {
+  const { registerDemoRoutes } = await import('../dev/index.js');
+  registerDemoRoutes(apiRouter);
+} catch {
+  // Removable module: if src/dev is not bundled or removed, startup continues smoothly
+}
+

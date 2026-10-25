@@ -40,4 +40,43 @@ export const adminController = {
     });
     return sendSuccess(response, { message: 'User verified.', data: user });
   }),
+
+  listUniversities: asyncHandler(async (_request, response) => {
+    const universities = await adminService.listUniversities();
+    return sendSuccess(response, { data: universities });
+  }),
+
+  createUniversity: asyncHandler(async (request, response) => {
+    const { name, slug, domain } = request.body as { name: string; slug: string; domain: string };
+    const university = await adminService.createUniversity({
+      name,
+      slug,
+      domain,
+      actorId: request.auth!.userId,
+    });
+    return sendSuccess(response, {
+      statusCode: 201,
+      message: 'University created successfully.',
+      data: university,
+    });
+  }),
+
+  toggleUniversityStatus: asyncHandler(async (request, response) => {
+    const { isActive } = request.body as { isActive: boolean };
+    const university = await adminService.toggleUniversityStatus(
+      request.params.id as string,
+      Boolean(isActive),
+      request.auth!.userId,
+    );
+    return sendSuccess(response, {
+      message: `University ${isActive ? 'activated' : 'deactivated'}.`,
+      data: university,
+    });
+  }),
+
+  getStats: asyncHandler(async (request, response) => {
+    const isSuperAdmin = request.auth!.role === 'SUPER_ADMIN';
+    const stats = await adminService.getStats(request.auth!.universityId, isSuperAdmin);
+    return sendSuccess(response, { data: stats });
+  }),
 };

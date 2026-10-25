@@ -1,4 +1,5 @@
 import type { RoleName } from '../../generated/prisma/client.js';
+import { env } from '../../config/index.js';
 import { ApiError } from '../../errors/api-error.js';
 import { tokenRepository } from '../../repositories/token.repository.js';
 import { universityRepository } from '../../repositories/university.repository.js';
@@ -51,7 +52,7 @@ function toSafeUser(user: AuthenticatedUserRecord) {
   };
 }
 
-async function issueSession(user: AuthenticatedUserRecord) {
+export async function issueSession(user: AuthenticatedUserRecord) {
   const subject = { userId: user.id, universityId: user.universityId, role: user.role.name };
   const refresh = tokenService.createRefreshToken(subject);
   const accessToken = tokenService.createAccessToken(subject);
@@ -96,6 +97,10 @@ export const authService = {
     const user = await userRepository.findAuthenticatedByEmail(email);
     if (!user || !user.isActive || !user.university.isActive) {
       throw ApiError.unauthorized('Email or password is incorrect.');
+    }
+
+    if (env.NODE_ENV === 'production' && user.isDemo) {
+      throw ApiError.unauthorized('Demo accounts are deactivated in production.');
     }
 
     const passwordMatches = await passwordService.verify(user.passwordHash, password);

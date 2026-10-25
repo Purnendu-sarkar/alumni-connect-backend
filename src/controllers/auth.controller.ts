@@ -63,4 +63,41 @@ export const authController = {
     const user = await authService.me(request.auth!.userId);
     return sendSuccess(response, { data: user });
   }),
+
+  forgotPassword: asyncHandler(async (request, response) => {
+    const { email } = request.body as { email: string };
+    const { passwordResetService } = await import('../services/auth/password-reset.service.js');
+    const result = await passwordResetService.requestPasswordReset(email);
+    return sendSuccess(response, {
+      message: result.message,
+      data: result,
+    });
+  }),
+
+  resetPassword: asyncHandler(async (request, response) => {
+    const { token, newPassword } = request.body as { token: string; newPassword: string };
+    const { passwordResetService } = await import('../services/auth/password-reset.service.js');
+    const result = await passwordResetService.resetPassword(token, newPassword);
+    return sendSuccess(response, {
+      message: result.message,
+    });
+  }),
+
+  sendVerificationEmail: asyncHandler(async (request, response) => {
+    const { passwordResetService } = await import('../services/auth/password-reset.service.js');
+    const result = await passwordResetService.requestEmailVerification(request.auth!.userId);
+    return sendSuccess(response, {
+      message: result.message,
+      data: result,
+    });
+  }),
+
+  verifyEmail: asyncHandler(async (request, response) => {
+    const { token } = request.body as { token: string };
+    const { passwordResetService } = await import('../services/auth/password-reset.service.js');
+    const result = await passwordResetService.verifyEmail(token);
+    return sendSuccess(response, {
+      message: result.message,
+    });
+  }),
 };

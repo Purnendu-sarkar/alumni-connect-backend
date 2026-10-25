@@ -68,6 +68,7 @@ model University {
   branding         Json?
   subscriptionPlan String             @default("free")
   isActive         Boolean            @default(true)
+  isDemo           Boolean            @default(false)
   users            User[]
   refreshTokens    RefreshToken[]
   connections      Connection[]
@@ -82,6 +83,8 @@ model University {
   auditLogs        AuditLog[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+
+  @@index([isDemo])
 }
 
 model User {
@@ -119,9 +122,11 @@ model User {
   verifiedAt          DateTime?
   onboardingCompleted Boolean             @default(false)
   isActive            Boolean             @default(true)
+  isDemo              Boolean             @default(false)
   university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
   role                Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
   refreshTokens       RefreshToken[]
+  verificationTokens  VerificationToken[]
   sentConnections     Connection[]        @relation("ConnectionRequester")
   receivedConnections Connection[]        @relation("ConnectionRecipient")
   mentoringRequests   MentorshipRequest[] @relation("Mentor")
@@ -143,6 +148,8 @@ model User {
   @@index([universityId, roleId, verificationStatus])
   @@index([universityId, department, batch])
   @@index([universityId, currentCompany])
+  @@index([isDemo])
+  @@index([universityId, isDemo])
 }
 
 model Role {
@@ -377,4 +384,18 @@ model AuditLog {
 
   @@index([universityId, createdAt])
   @@index([actorId, createdAt])
+}
+
+model VerificationToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  type       String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([tokenHash])
 }

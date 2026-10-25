@@ -2,7 +2,7 @@ import { ApiError } from '../errors/api-error.js';
 import { jobService } from '../services/job/job.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { sendSuccess } from '../utils/api-response.js';
-import { toPageMeta } from '../utils/pagination.js';
+import { paginationQuerySchema, toPageMeta } from '../utils/pagination.js';
 import type {
   applyJobSchema,
   createJobSchema,
@@ -64,5 +64,25 @@ export const jobController = {
       message: 'Job application submitted.',
       data: application,
     });
+  }),
+
+  listPending: asyncHandler(async (request, response) => {
+    const pagination = paginationQuerySchema.parse(request.query);
+    const [jobs, total] = await jobService.listPending(request.auth!.universityId, pagination);
+    return sendSuccess(response, {
+      data: jobs,
+      meta: toPageMeta(pagination.page, pagination.limit, total),
+    });
+  }),
+
+  listMine: asyncHandler(async (request, response) => {
+    const result = await jobService.listMine(request.auth!.userId, request.auth!.role);
+    return sendSuccess(response, { data: result });
+  }),
+
+  getById: asyncHandler(async (request, response) => {
+    const job = await jobService.getById(request.params.id as string);
+    if (!job) throw ApiError.notFound('Job');
+    return sendSuccess(response, { data: job });
   }),
 };

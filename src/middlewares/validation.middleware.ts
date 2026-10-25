@@ -14,7 +14,12 @@ export function validate(schema: ZodType, part: RequestPart = 'body'): RequestHa
       );
     }
 
-    Object.assign(request, { [part]: parsed.data });
+    Object.defineProperty(request, part, {
+      value: parsed.data,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
     return next();
   };
 }

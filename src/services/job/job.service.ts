@@ -84,4 +84,21 @@ export const jobService = {
       throw error;
     }
   },
+
+  listPending(universityId: string, pagination: PaginationInput) {
+    return jobRepository.listPending(universityId, pagination);
+  },
+
+  async listMine(userId: string, role: string) {
+    if (role === 'STUDENT') {
+      const applications = await jobRepository.listMyApplications(userId);
+      return { applications, postings: [] };
+    }
+    const postings = await jobRepository.listMyPosted(userId);
+    return { postings, applications: [] };
+  },
+
+  getById(id: string) {
+    return jobRepository.findById(id);
+  },
 };

@@ -74,4 +74,72 @@ export const jobRepository = {
   apply(jobId: string, applicantId: string, message?: string) {
     return prisma.jobApplication.create({ data: { jobId, applicantId, message } });
   },
+
+  listPending(universityId: string, pagination: PaginationInput) {
+    const where: Prisma.JobWhereInput = {
+      universityId,
+      status: 'PENDING',
+    };
+    return prisma.$transaction([
+      prisma.job.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          company: true,
+          location: true,
+          employmentType: true,
+          applicationUrl: true,
+          applicationEmail: true,
+          createdAt: true,
+          postedBy: { select: { id: true, name: true, email: true, currentCompany: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (pagination.page - 1) * pagination.limit,
+        take: pagination.limit,
+      }),
+      prisma.job.count({ where }),
+    ]);
+  },
+
+  listMyPosted(userId: string) {
+    return prisma.job.findMany({
+      where: { postedById: userId },
+      select: {
+        id: true,
+        title: true,
+        company: true,
+        location: true,
+        employmentType: true,
+        status: true,
+        rejectionReason: true,
+        createdAt: true,
+        _count: { select: { applications: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  listMyApplications(userId: string) {
+    return prisma.jobApplication.findMany({
+      where: { applicantId: userId },
+      select: {
+        id: true,
+        createdAt: true,
+        message: true,
+        job: {
+          select: {
+            id: true,
+            title: true,
+            company: true,
+            location: true,
+            employmentType: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
 };

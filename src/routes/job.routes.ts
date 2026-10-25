@@ -6,6 +6,7 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { requirePermission } from '../middlewares/permission.middleware.js';
 import { requireTenant, resolveTenant } from '../middlewares/tenant.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
+import { paginationQuerySchema } from '../utils/pagination.js';
 import {
   applyJobSchema,
   createJobSchema,
@@ -23,6 +24,18 @@ jobRouter.get(
   validate(jobQuerySchema, 'query'),
   jobController.listPublished,
 );
+jobRouter.get(
+  '/pending',
+  authenticate,
+  requirePermission(PERMISSIONS.JOB_REVIEW),
+  validate(paginationQuerySchema, 'query'),
+  jobController.listPending,
+);
+jobRouter.get(
+  '/mine',
+  authenticate,
+  jobController.listMine,
+);
 jobRouter.post(
   '/',
   authenticate,
@@ -30,8 +43,21 @@ jobRouter.post(
   validate(createJobSchema),
   jobController.create,
 );
+jobRouter.get(
+  '/:id',
+  validate(jobIdParamSchema, 'params'),
+  jobController.getById,
+);
 jobRouter.patch(
   '/:id/review',
+  authenticate,
+  requirePermission(PERMISSIONS.JOB_REVIEW),
+  validate(jobIdParamSchema, 'params'),
+  validate(reviewJobSchema),
+  jobController.review,
+);
+jobRouter.patch(
+  '/:id/status',
   authenticate,
   requirePermission(PERMISSIONS.JOB_REVIEW),
   validate(jobIdParamSchema, 'params'),

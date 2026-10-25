@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 
+import { env } from '../config/index.js';
 import { ApiError } from '../errors/api-error.js';
 import { userRepository } from '../repositories/user.repository.js';
 import { tokenService } from '../services/auth/token.service.js';
@@ -18,11 +19,16 @@ export const authenticate: RequestHandler = asyncHandler(async (request, _respon
     throw ApiError.unauthorized('This account is unavailable.');
   }
 
+  if (env.NODE_ENV === 'production' && user.isDemo) {
+    throw ApiError.unauthorized('Demo access tokens are deactivated in production.');
+  }
+
   request.auth = {
     userId: user.id,
     universityId: user.universityId,
     role: user.role.name,
     permissions: user.role.permissions.map((permission) => permission.key),
+    isDemo: user.isDemo,
   };
   request.tenant = {
     id: user.university.id,

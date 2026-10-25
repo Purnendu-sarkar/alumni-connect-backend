@@ -9,6 +9,7 @@ declare global {
         universityId: string;
         role: RoleName;
         permissions: string[];
+        isDemo?: boolean;
       };
       tenant?: {
         id: string;
