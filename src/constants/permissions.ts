@@ -1,64 +1,111 @@
-import type { RoleName } from '../generated/prisma/client.js';
+import { Role } from '@prisma/client';
 
 export const PERMISSIONS = {
-  ALUMNI_READ: 'alumni:read',
-  CONNECTION_CREATE: 'connection:create',
+  // Directory & Profile
+  DIRECTORY_READ: 'directory:read',
+  PROFILE_EDIT_OWN: 'profile:edit:own',
+
+  // Connections
+  CONNECTION_REQUEST: 'connection:request',
   CONNECTION_RESPOND: 'connection:respond',
+
+  // Mentorship
+  MENTORSHIP_REQUEST: 'mentorship:request',
+  MENTORSHIP_OFFER: 'mentorship:offer',
+  MENTORSHIP_MANAGE: 'mentorship:manage',
+
+  // Jobs
   JOB_READ: 'job:read',
-  JOB_CREATE: 'job:create',
   JOB_APPLY: 'job:apply',
-  JOB_REVIEW: 'job:review',
-  USER_VERIFY: 'user:verify',
-  ANALYTICS_READ: 'analytics:read',
-  CONTENT_MANAGE: 'content:manage',
+  JOB_CREATE: 'job:create',
+  JOB_EDIT_OWN: 'job:edit:own',
+  JOB_MODERATE: 'job:moderate',
+  JOB_OVERRIDE_ADMIN: 'job:override:admin',
+
+  // Events & RSVPs
+  EVENT_READ: 'event:read',
+  EVENT_RSVP: 'event:rsvp',
   EVENT_MANAGE: 'event:manage',
+
+  // Announcements
+  ANNOUNCEMENT_READ: 'announcement:read',
+  ANNOUNCEMENT_MANAGE: 'announcement:manage',
+
+  // Success Stories
+  STORY_READ: 'story:read',
+  STORY_CREATE: 'story:create',
+  STORY_MODERATE: 'story:moderate',
+
+  // Internal Messaging
+  MESSAGE_SEND: 'message:send',
+  MESSAGE_READ: 'message:read',
+
+  // Moderation & Reports
+  REPORT_CREATE: 'report:create',
   REPORT_REVIEW: 'report:review',
-  UNIVERSITY_MANAGE: 'university:manage',
+  USER_RESTRICT: 'user:restrict',
+
+  // Admin & Governance
+  USER_VERIFY: 'user:verify',
+  USER_MANAGE: 'user:manage',
+  AUDIT_READ: 'audit:read',
+  SETTINGS_MANAGE: 'settings:manage',
+  SYSTEM_ANALYTICS: 'system:analytics',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
-const allPermissions = Object.values(PERMISSIONS);
-
-export const rolePermissionMap: Record<RoleName, readonly PermissionKey[]> = {
+export const rolePermissionMap: Record<Role, readonly PermissionKey[]> = {
   STUDENT: [
-    PERMISSIONS.ALUMNI_READ,
-    PERMISSIONS.CONNECTION_CREATE,
+    PERMISSIONS.DIRECTORY_READ,
+    PERMISSIONS.PROFILE_EDIT_OWN,
+    PERMISSIONS.CONNECTION_REQUEST,
     PERMISSIONS.CONNECTION_RESPOND,
+    PERMISSIONS.MENTORSHIP_REQUEST,
     PERMISSIONS.JOB_READ,
     PERMISSIONS.JOB_APPLY,
+    PERMISSIONS.EVENT_READ,
+    PERMISSIONS.EVENT_RSVP,
+    PERMISSIONS.ANNOUNCEMENT_READ,
+    PERMISSIONS.STORY_READ,
+    PERMISSIONS.MESSAGE_SEND,
+    PERMISSIONS.MESSAGE_READ,
+    PERMISSIONS.REPORT_CREATE,
   ],
   ALUMNI: [
-    PERMISSIONS.ALUMNI_READ,
-    PERMISSIONS.CONNECTION_CREATE,
+    PERMISSIONS.DIRECTORY_READ,
+    PERMISSIONS.PROFILE_EDIT_OWN,
+    PERMISSIONS.CONNECTION_REQUEST,
     PERMISSIONS.CONNECTION_RESPOND,
+    PERMISSIONS.MENTORSHIP_OFFER,
+    PERMISSIONS.MENTORSHIP_MANAGE,
     PERMISSIONS.JOB_READ,
-    PERMISSIONS.JOB_CREATE,
     PERMISSIONS.JOB_APPLY,
+    PERMISSIONS.JOB_CREATE,
+    PERMISSIONS.JOB_EDIT_OWN,
+    PERMISSIONS.EVENT_READ,
+    PERMISSIONS.EVENT_RSVP,
+    PERMISSIONS.ANNOUNCEMENT_READ,
+    PERMISSIONS.STORY_READ,
+    PERMISSIONS.STORY_CREATE,
+    PERMISSIONS.MESSAGE_SEND,
+    PERMISSIONS.MESSAGE_READ,
+    PERMISSIONS.REPORT_CREATE,
   ],
   MODERATOR: [
-    PERMISSIONS.ALUMNI_READ,
-    PERMISSIONS.CONNECTION_CREATE,
-    PERMISSIONS.CONNECTION_RESPOND,
+    PERMISSIONS.DIRECTORY_READ,
+    PERMISSIONS.PROFILE_EDIT_OWN,
     PERMISSIONS.JOB_READ,
-    PERMISSIONS.JOB_CREATE,
-    PERMISSIONS.JOB_APPLY,
-    PERMISSIONS.JOB_REVIEW,
-    PERMISSIONS.REPORT_REVIEW,
-  ],
-  ADMIN: [
-    PERMISSIONS.ALUMNI_READ,
-    PERMISSIONS.CONNECTION_CREATE,
-    PERMISSIONS.CONNECTION_RESPOND,
-    PERMISSIONS.JOB_READ,
-    PERMISSIONS.JOB_CREATE,
-    PERMISSIONS.JOB_APPLY,
-    PERMISSIONS.JOB_REVIEW,
-    PERMISSIONS.USER_VERIFY,
-    PERMISSIONS.ANALYTICS_READ,
-    PERMISSIONS.CONTENT_MANAGE,
+    PERMISSIONS.JOB_MODERATE,
+    PERMISSIONS.EVENT_READ,
     PERMISSIONS.EVENT_MANAGE,
+    PERMISSIONS.ANNOUNCEMENT_READ,
+    PERMISSIONS.ANNOUNCEMENT_MANAGE,
+    PERMISSIONS.STORY_READ,
+    PERMISSIONS.STORY_MODERATE,
+    PERMISSIONS.REPORT_CREATE,
     PERMISSIONS.REPORT_REVIEW,
+    PERMISSIONS.USER_RESTRICT,
   ],
-  SUPER_ADMIN: allPermissions,
+  SUPER_ADMIN: Object.values(PERMISSIONS),
 };

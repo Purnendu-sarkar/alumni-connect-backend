@@ -1,92 +1,160 @@
 import 'dotenv/config';
-
 import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient, Role, UserStatus, VerificationStatus } from '@prisma/client';
 
-import { PrismaClient, RoleName } from '../src/generated/prisma/client.js';
 import { PERMISSIONS, rolePermissionMap } from '../src/constants/permissions.js';
 import { passwordService } from '../src/services/auth/password.service.js';
 
-const databaseUrl = process.env.DATABASE_URL;
-const seedAdminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
-const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+const databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
 
-if (!databaseUrl || !seedAdminEmail || !seedAdminPassword) {
-  throw new Error('DATABASE_URL, SEED_ADMIN_EMAIL, and SEED_ADMIN_PASSWORD are required.');
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL or DIRECT_URL is required to run the seed script.');
 }
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: databaseUrl }),
 });
 
-const permissionKeys = Object.values(PERMISSIONS);
-
 async function main() {
-  const permissions = await Promise.all(
+  console.log('[Seed] Starting database seeding for AlumniConnect (Single-University)...');
+
+  // 1. Seed Permissions
+  const permissionKeys = Object.values(PERMISSIONS);
+  console.log(`[Seed] Upserting ${permissionKeys.length} permissions...`);
+
+  const createdPermissions = await Promise.all(
     permissionKeys.map((key) =>
       prisma.permission.upsert({
         where: { key },
-        update: {},
-        create: { key },
+        update: { name: key.replace(':', ' ').toUpperCase() },
+        create: {
+          key,
+          name: key.replace(':', ' ').toUpperCase(),
+          category: key.split(':')[0],
+          description: `Permission allowing ${key} on AlumniConnect.`,
+        },
       }),
     ),
   );
 
-  const permissionIdByKey = new Map(
-    permissions.map((permission) => [permission.key, permission.id]),
-  );
+  const permissionMap = new Map(createdPermissions.map((p) => [p.key, p.id]));
 
-  await Promise.all(
-    Object.values(RoleName).map(async (name) => {
-      const connections = rolePermissionMap[name].map((key) => {
-        const permissionId = permissionIdByKey.get(key);
-        if (!permissionId) throw new Error(`Missing permission ${key}.`);
-        return { id: permissionId };
-      });
+  // 2. Seed RolePermission mappings
+  console.log('[Seed] Linking RolePermissions for 4 core roles...');
+  for (const [roleStr, keys] of Object.entries(rolePermissionMap)) {
+    const role = roleStr as Role;
+    for (const key of keys) {
+      const permissionId = permissionMap.get(key);
+      if (permissionId) {
+        await prisma.rolePermission.upsert({
+          where: {
+            role_permissionId: {
+              role,
+              permissionId,
+            },
+          },
+          update: {},
+          create: {
+            role,
+            permissionId,
+          },
+        });
+      }
+    }
+  }
 
-      return prisma.role.upsert({
-        where: { name },
-        update: { permissions: { set: connections } },
-        create: { name, permissions: { connect: connections } },
-      });
-    }),
-  );
+  // 3. Seed System Settings
+  console.log('[Seed] Configuring baseline SystemSettings...');
+  const defaultSettings = [
+    {
+      key: 'university.name',
+      value: 'North Western University',
+    },
+    {
+      key: 'university.allowed_email_domains',
+      value: ['nwu.ac.bd', 'alumni.nwu.ac.bd'],
+    },
+    {
+      key: 'mentorship.max_active_mentees',
+      value: 5,
+    },
+    {
+      key: 'registration.require_admin_approval',
+      value: true,
+    },
+    {
+      key: 'security.session_timeout_minutes',
+      value: 120,
+    },
+    {
+      key: 'security.admin_reauth_window_minutes',
+      value: 15,
+    },
+  ];
 
-  const university = await prisma.university.upsert({
-    where: { domain: 'example.edu' },
-    update: { name: 'Demo University', slug: 'demo-university', isActive: true },
-    create: { name: 'Demo University', slug: 'demo-university', domain: 'example.edu' },
-  });
+  for (const setting of defaultSettings) {
+    await prisma.systemSetting.upsert({
+      where: { key: setting.key },
+      update: { value: setting.value },
+      create: {
+        key: setting.key,
+        value: setting.value,
+      },
+    });
+  }
 
-  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.ADMIN } });
-  const passwordHash = await passwordService.hash(seedAdminPassword!);
+  // 4. Seed Super Admin
+  const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase() || 'superadmin@nwu.ac.bd';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'SuperAdmin123!';
+  const adminPasswordHash = await passwordService.hash(adminPassword);
 
-  await prisma.user.upsert({
-    where: { email: seedAdminEmail! },
+  console.log(`[Seed] Ensuring Super Admin account (${adminEmail})...`);
+  const superAdmin = await prisma.user.upsert({
+    where: { email: adminEmail },
     update: {
-      name: 'Platform Admin',
-      universityId: university.id,
-      roleId: adminRole.id,
-      passwordHash,
-      verified: true,
-      isActive: true,
+      role: Role.SUPER_ADMIN,
+      status: UserStatus.ACTIVE,
+      verificationStatus: VerificationStatus.NOT_REQUIRED,
     },
     create: {
-      name: 'Platform Admin',
-      email: seedAdminEmail!,
-      passwordHash,
-      universityId: university.id,
-      roleId: adminRole.id,
-      verified: true,
+      email: adminEmail,
+      passwordHash: adminPasswordHash,
+      role: Role.SUPER_ADMIN,
+      status: UserStatus.ACTIVE,
+      verificationStatus: VerificationStatus.NOT_REQUIRED,
     },
   });
 
-  console.log(`Seeded ${university.name}; admin: ${seedAdminEmail!}`);
+  // Ensure Super Admin Profile
+  await prisma.profile.upsert({
+    where: { userId: superAdmin.id },
+    update: {},
+    create: {
+      userId: superAdmin.id,
+      fullName: 'Platform Super Admin',
+      department: 'Central Administration',
+      currentJob: 'System Administrator',
+      bio: 'Institutional administration and security governance.',
+      skills: ['System Administration', 'Security Governance'],
+    },
+  });
+
+  // Ensure Super Admin Privacy Setting
+  await prisma.privacySetting.upsert({
+    where: { userId: superAdmin.id },
+    update: {},
+    create: {
+      userId: superAdmin.id,
+    },
+  });
+
+  console.log('[Seed] Seeding completed successfully!');
 }
 
 main()
-  .catch((error: unknown) => {
-    console.error(error);
-    process.exitCode = 1;
+  .catch((err) => {
+    console.error('[Seed] Error seeding database:', err);
+    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();

@@ -1,165 +1,97 @@
+import { JobStatus, Role, UserStatus, VerificationStatus } from '@prisma/client';
+
+import { prisma } from '../../config/database.js';
 import { ApiError } from '../../errors/api-error.js';
-import { auditLogRepository } from '../../repositories/audit-log.repository.js';
-import {
-  userRepository,
-  type VerificationFilters,
-} from '../../repositories/user.repository.js';
-import { toPageMeta } from '../../utils/pagination.js';
+import { auditLogModel } from '../../models/audit-log.model.js';
 
 export const adminService = {
-  async listVerifications(universityId: string, filters: VerificationFilters) {
-    const [users, total] = await userRepository.listVerifications(universityId, filters);
-    return {
-      users,
-      meta: toPageMeta(filters.page, filters.limit, total),
-    };
-  },
-
   async reviewVerification(input: {
     userId: string;
-    universityId: string;
-    actorId: string;
+    reviewerId: string;
     status: 'APPROVED' | 'REJECTED';
     reason?: string;
   }) {
-    const target = await userRepository.findAuthenticatedById(input.userId);
-    if (!target || target.universityId !== input.universityId) {
-      throw ApiError.notFound('User');
-    }
-
-    const reviewed = await userRepository.reviewVerification(
-      input.userId,
-      input.universityId,
-      input.status,
-      input.reason,
-    );
-
-    await auditLogRepository.record({
-      universityId: input.universityId,
-      actorId: input.actorId,
-      action: input.status === 'APPROVED' ? 'user.verified' : 'user.verification_rejected',
-      targetType: 'user',
-      targetId: input.userId,
-      metadata: input.reason ? { reason: input.reason } : undefined,
+    const user = await prisma.user.findUnique({
+      where: { id: input.userId },
     });
 
-    return reviewed;
-  },
+    if (!user) throw ApiError.notFound('User');
 
-  async verifyUser(input: { userId: string; universityId: string; actorId: string }) {
-    return this.reviewVerification({
-      ...input,
-      status: 'APPROVED',
-    });
-  },
+    const nextVerificationStatus =
+      input.status === 'APPROVED' ? VerificationStatus.APPROVED : VerificationStatus.REJECTED;
+    const nextUserStatus =
+      input.status === 'APPROVED' ? UserStatus.ACTIVE : user.status;
 
-  async listUniversities() {
-    const { prisma } = await import('../../config/database.js');
-    return prisma.university.findMany({
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        domain: true,
-        isActive: true,
-        isDemo: true,
-        createdAt: true,
-        _count: {
-          select: {
-            users: true,
-            jobs: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  },
-
-  async createUniversity(input: { name: string; slug: string; domain: string; actorId: string }) {
-    const { prisma } = await import('../../config/database.js');
-    const existing = await prisma.university.findFirst({
-      where: {
-        OR: [{ slug: input.slug }, { domain: input.domain }],
-      },
-    });
-    if (existing) throw ApiError.conflict('A university with this slug or domain already exists.');
-
-    const university = await prisma.university.create({
+    const updated = await prisma.user.update({
+      where: { id: input.userId },
       data: {
-        name: input.name,
-        slug: input.slug,
-        domain: input.domain,
-        isActive: true,
-        isDemo: false,
+        verificationStatus: nextVerificationStatus,
+        status: nextUserStatus,
+        verifiedAt: input.status === 'APPROVED' ? new Date() : undefined,
+        verifiedById: input.reviewerId,
+        verificationNote: input.reason,
+      },
+      include: {
+        profile: true,
       },
     });
 
-    await auditLogRepository.record({
-      universityId: university.id,
-      actorId: input.actorId,
-      action: 'university.created',
-      targetType: 'university',
-      targetId: university.id,
+    await auditLogModel.record({
+      actorId: input.reviewerId,
+      actorRole: Role.SUPER_ADMIN,
+      action: `USER_VERIFICATION_${input.status}`,
+      targetType: 'User',
+      targetId: user.id,
+      metadata: { reason: input.reason },
     });
 
-    return university;
+    return updated;
   },
 
-  async toggleUniversityStatus(id: string, isActive: boolean, actorId: string) {
-    const { prisma } = await import('../../config/database.js');
-    const university = await prisma.university.update({
-      where: { id },
-      data: { isActive },
-    });
+  async listVerifications(options: {
+    role?: Role;
+    status?: VerificationStatus;
+    skip?: number;
+    take?: number;
+  }) {
+    const where = {
+      verificationStatus: options.status ?? VerificationStatus.PENDING,
+      ...(options.role ? { role: options.role } : {}),
+    };
 
-    await auditLogRepository.record({
-      universityId: university.id,
-      actorId,
-      action: isActive ? 'university.activated' : 'university.deactivated',
-      targetType: 'university',
-      targetId: university.id,
-    });
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip: options.skip ?? 0,
+        take: options.take ?? 50,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          profile: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-    return university;
+    return { users, total };
   },
 
-  async getStats(universityId: string, isSuperAdmin: boolean) {
-    const { prisma } = await import('../../config/database.js');
-
-    if (isSuperAdmin) {
-      const [totalUniversities, totalUsers, totalJobs, pendingVerifications, auditLogsCount] = await Promise.all([
-        prisma.university.count(),
-        prisma.user.count(),
-        prisma.job.count(),
-        prisma.user.count({ where: { verificationStatus: 'PENDING' } }),
-        prisma.auditLog.count(),
-      ]);
-
-      return {
-        scope: 'PLATFORM',
-        totalUniversities,
-        totalUsers,
-        totalJobs,
-        pendingVerifications,
-        auditLogsCount,
-      };
-    }
-
-    const [totalStudents, totalAlumni, pendingVerifications, activeJobs, pendingJobs] = await Promise.all([
-      prisma.user.count({ where: { universityId, role: { name: 'STUDENT' } } }),
-      prisma.user.count({ where: { universityId, role: { name: 'ALUMNI' } } }),
-      prisma.user.count({ where: { universityId, verificationStatus: 'PENDING' } }),
-      prisma.job.count({ where: { universityId, status: 'APPROVED' } }),
-      prisma.job.count({ where: { universityId, status: 'PENDING' } }),
+  async getPlatformStats() {
+    const [totalUsers, activeJobs, pendingVerifications, totalConnections] = await Promise.all([
+      prisma.user.count(),
+      prisma.job.count({ where: { status: JobStatus.PUBLISHED } }),
+      prisma.user.count({ where: { verificationStatus: VerificationStatus.PENDING } }),
+      prisma.connection.count({ where: { status: 'ACCEPTED' } }),
     ]);
 
     return {
-      scope: 'UNIVERSITY',
-      totalStudents,
-      totalAlumni,
-      pendingVerifications,
+      totalUsers,
       activeJobs,
-      pendingJobs,
+      pendingVerifications,
+      totalConnections,
     };
+  },
+
+  listAuditLogs(options: { action?: string; targetType?: string; skip?: number; take?: number }) {
+    return auditLogModel.list(options);
   },
 };

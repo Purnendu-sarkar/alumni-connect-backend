@@ -11,9 +11,9 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-that-is-long-enough-for-va
 
 const { app } = await import('../../src/app.js');
 
-describe('GET /api/v1/health', () => {
+describe('GET /api/healthz', () => {
   it('returns the service health contract and a request id', async () => {
-    const response = await request(app).get('/api/v1/health').expect(200);
+    const response = await request(app).get('/api/healthz').expect(200);
 
     expect(response.body).toEqual({
       success: true,

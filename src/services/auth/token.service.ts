@@ -1,23 +1,32 @@
 import { createHash, randomUUID } from 'node:crypto';
-
+import type { Response } from 'express';
 import jwt, { type JwtPayload, type SignOptions } from 'jsonwebtoken';
+import type { Role } from '@prisma/client';
 
-import { env } from '../../config/index.js';
-import type { RoleName } from '../../generated/prisma/client.js';
+import { env, shouldUseSecureCookies } from '../../config/index.js';
 import { ApiError } from '../../errors/api-error.js';
 
-interface TokenSubject {
+export interface TokenSubject {
   userId: string;
-  universityId: string;
-  role: RoleName;
+  role: Role;
+  sessionId: string;
+  familyId: string;
 }
 
-interface DecodedToken extends JwtPayload {
+export interface DecodedAccessToken extends JwtPayload {
   sub: string;
-  universityId: string;
-  role: RoleName;
-  tokenType: 'access' | 'refresh';
-  jti?: string;
+  role: Role;
+  sessionId: string;
+  familyId: string;
+  tokenType: 'access';
+}
+
+export interface DecodedRefreshToken extends JwtPayload {
+  sub: string;
+  sessionId: string;
+  familyId: string;
+  tokenType: 'refresh';
+  jti: string;
 }
 
 function durationToMilliseconds(value: string): number {
@@ -32,89 +41,115 @@ function durationToMilliseconds(value: string): number {
   return amount * multipliers[unit];
 }
 
-function decode(token: string, secret: string): DecodedToken {
-  try {
-    const decoded = jwt.verify(token, secret, {
-      issuer: 'alumni-connect-api',
-      audience: 'alumni-connect-client',
-    });
-
-    if (
-      typeof decoded === 'string' ||
-      typeof decoded.sub !== 'string' ||
-      typeof decoded.universityId !== 'string' ||
-      typeof decoded.role !== 'string' ||
-      (decoded.tokenType !== 'access' && decoded.tokenType !== 'refresh')
-    ) {
-      throw ApiError.unauthorized('The authentication token is malformed.');
-    }
-
-    return decoded as DecodedToken;
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw ApiError.unauthorized('The authentication token is invalid or expired.');
-  }
-}
-
 export const tokenService = {
   createAccessToken(subject: TokenSubject) {
-    const options: SignOptions = {
-      expiresIn: env.JWT_ACCESS_TTL as NonNullable<SignOptions['expiresIn']>,
-      issuer: 'alumni-connect-api',
-      audience: 'alumni-connect-client',
+    const payload = {
+      sub: subject.userId,
+      role: subject.role,
+      sessionId: subject.sessionId,
+      familyId: subject.familyId,
+      tokenType: 'access',
     };
 
-    return jwt.sign(
-      {
-        universityId: subject.universityId,
-        role: subject.role,
-        tokenType: 'access',
-      },
-      env.JWT_ACCESS_SECRET,
-      { ...options, subject: subject.userId },
-    );
+    const options: SignOptions = {
+      issuer: 'alumni-connect-api',
+      audience: 'alumni-connect-client',
+      expiresIn: env.JWT_ACCESS_TTL as `${number}${'s' | 'm' | 'h' | 'd'}`,
+    };
+
+    return {
+      token: jwt.sign(payload, env.JWT_ACCESS_SECRET, options),
+      expiresAt: new Date(Date.now() + durationToMilliseconds(env.JWT_ACCESS_TTL)),
+    };
   },
 
   createRefreshToken(subject: TokenSubject) {
-    const id = randomUUID();
+    const tokenId = randomUUID();
+    const payload = {
+      sub: subject.userId,
+      sessionId: subject.sessionId,
+      familyId: subject.familyId,
+      tokenType: 'refresh',
+      jti: tokenId,
+    };
+
     const options: SignOptions = {
-      expiresIn: env.JWT_REFRESH_TTL as NonNullable<SignOptions['expiresIn']>,
       issuer: 'alumni-connect-api',
       audience: 'alumni-connect-client',
-      jwtid: id,
+      expiresIn: env.JWT_REFRESH_TTL as `${number}${'s' | 'm' | 'h' | 'd'}`,
     };
-    const token = jwt.sign(
-      {
-        universityId: subject.universityId,
-        role: subject.role,
-        tokenType: 'refresh',
-      },
-      env.JWT_REFRESH_SECRET,
-      { ...options, subject: subject.userId },
-    );
+
+    const token = jwt.sign(payload, env.JWT_REFRESH_SECRET, options);
+    const tokenHash = this.hashToken(token);
 
     return {
-      id,
+      tokenId,
       token,
+      tokenHash,
       expiresAt: new Date(Date.now() + durationToMilliseconds(env.JWT_REFRESH_TTL)),
     };
   },
 
-  verifyAccessToken(token: string) {
-    const decoded = decode(token, env.JWT_ACCESS_SECRET);
-    if (decoded.tokenType !== 'access') throw ApiError.unauthorized('An access token is required.');
-    return decoded;
-  },
+  verifyAccessToken(token: string): DecodedAccessToken {
+    try {
+      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+        issuer: 'alumni-connect-api',
+        audience: 'alumni-connect-client',
+      });
 
-  verifyRefreshToken(token: string) {
-    const decoded = decode(token, env.JWT_REFRESH_SECRET);
-    if (decoded.tokenType !== 'refresh' || !decoded.jti) {
-      throw ApiError.unauthorized('A refresh token is required.');
+      if (typeof decoded === 'string' || decoded.tokenType !== 'access') {
+        throw ApiError.unauthorized('Invalid access token payload.');
+      }
+
+      return decoded as DecodedAccessToken;
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      throw ApiError.unauthorized('Access token is invalid or expired.');
     }
-    return decoded;
   },
 
-  hash(token: string) {
+  verifyRefreshToken(token: string): DecodedRefreshToken {
+    try {
+      const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET, {
+        issuer: 'alumni-connect-api',
+        audience: 'alumni-connect-client',
+      });
+
+      if (typeof decoded === 'string' || decoded.tokenType !== 'refresh') {
+        throw ApiError.unauthorized('Invalid refresh token payload.');
+      }
+
+      return decoded as DecodedRefreshToken;
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      throw ApiError.unauthorized('Refresh token is invalid or expired.');
+    }
+  },
+
+  hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  },
+
+  setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: shouldUseSecureCookies,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: durationToMilliseconds(env.JWT_ACCESS_TTL),
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: shouldUseSecureCookies,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: durationToMilliseconds(env.JWT_REFRESH_TTL),
+    });
+  },
+
+  clearAuthCookies(res: Response) {
+    res.clearCookie('access_token', { path: '/' });
+    res.clearCookie('refresh_token', { path: '/' });
   },
 };

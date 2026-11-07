@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
+import { UserStatus } from '@prisma/client';
+
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/index.js';
 import { ApiError } from '../../errors/api-error.js';
-import { auditLogRepository } from '../../repositories/audit-log.repository.js';
-import { tokenRepository } from '../../repositories/token.repository.js';
+import { auditLogModel } from '../../models/audit-log.model.js';
+import { sessionModel } from '../../models/session.model.js';
 import { emailService } from '../email/email.service.js';
 import { passwordService } from './password.service.js';
 
@@ -16,11 +18,10 @@ export const passwordResetService = {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, name: true, email: true, isActive: true },
+      include: { profile: { select: { fullName: true } } },
     });
 
-    if (!user || !user.isActive) {
-      // Uniform timing response
+    if (!user || user.status === UserStatus.SUSPENDED) {
       return {
         success: true,
         message: 'If an account exists with that email, a password reset link has been dispatched.',
@@ -50,24 +51,23 @@ export const passwordResetService = {
       },
     });
 
-    // Send email via Mailpit / SMTP
-    const emailResult = await emailService.sendPasswordResetEmail(user.email, user.name, plainToken);
+    const fullName = user.profile?.fullName ?? user.email;
+    const emailResult = await emailService.sendPasswordResetEmail(user.email, fullName, plainToken);
 
     return {
       success: true,
       message: 'If an account exists with that email, a password reset link has been dispatched.',
       deliveredViaSmtp: emailResult.deliveredViaSmtp,
-      // Provide token in non-production response to facilitate testing and viva demonstration
       ...(env.NODE_ENV !== 'production' ? { debugToken: plainToken, resetUrl: emailResult.resetUrl } : {}),
     };
   },
 
   /**
-   * Validates single-use token and expiry, updates password hash, and revokes previous sessions.
+   * Verifies reset token and updates user password securely.
    */
   async resetPassword(plainToken: string, newPassword: string) {
     if (!plainToken || typeof plainToken !== 'string') {
-      throw ApiError.badRequest('A valid password reset token is required.');
+      throw ApiError.badRequest('A valid reset token is required.');
     }
 
     const tokenHash = crypto.createHash('sha256').update(plainToken.trim()).digest('hex');
@@ -75,9 +75,7 @@ export const passwordResetService = {
     const tokenRecord = await prisma.verificationToken.findUnique({
       where: { tokenHash },
       include: {
-        user: {
-          select: { id: true, email: true, universityId: true, isActive: true },
-        },
+        user: true,
       },
     });
 
@@ -85,7 +83,7 @@ export const passwordResetService = {
       throw ApiError.badRequest('Invalid or unrecognized password reset token.');
     }
 
-    if (tokenRecord.consumedAt !== null) {
+    if (tokenRecord.usedAt !== null) {
       throw ApiError.badRequest('This password reset link has already been used.');
     }
 
@@ -93,56 +91,51 @@ export const passwordResetService = {
       throw ApiError.badRequest('This password reset link has expired. Please request a new one.');
     }
 
-    if (!tokenRecord.user || !tokenRecord.user.isActive) {
-      throw ApiError.badRequest('Associated account is inactive or disabled.');
-    }
-
-    const newPasswordHash = await passwordService.hash(newPassword);
+    const passwordHash = await passwordService.hash(newPassword);
 
     await prisma.$transaction(async (tx) => {
-      // 1. Update user password
       await tx.user.update({
         where: { id: tokenRecord.user.id },
-        data: { passwordHash: newPasswordHash },
+        data: {
+          passwordHash,
+          passwordChangedAt: new Date(),
+        },
       });
 
-      // 2. Mark token as consumed (single-use guarantee)
       await tx.verificationToken.update({
         where: { id: tokenRecord.id },
-        data: { consumedAt: new Date() },
+        data: { usedAt: new Date() },
       });
+    });
 
-      // 3. Revoke all active refresh sessions for security
-      await tokenRepository.revokeByUserId(tokenRecord.user.id);
+    // Revoke all existing sessions on password reset
+    await sessionModel.revokeAllForUser(tokenRecord.user.id, 'PASSWORD_RESET');
 
-      // 4. Record audit log
-      await auditLogRepository.record({
-        universityId: tokenRecord.user.universityId,
-        actorId: tokenRecord.user.id,
-        action: 'auth.password_reset',
-        targetType: 'user',
-        targetId: tokenRecord.user.id,
-      });
+    await auditLogModel.record({
+      actorId: tokenRecord.user.id,
+      action: 'PASSWORD_RESET_SUCCESS',
+      targetType: 'User',
+      targetId: tokenRecord.user.id,
+      metadata: { reason: 'Password reset completed via token' },
     });
 
     return {
       success: true,
-      message: 'Your password has been reset successfully. Please sign in with your new credentials.',
+      message: 'Your password has been reset successfully. Please log in with your new password.',
     };
   },
 
   /**
-   * Generates a 24-hour single-use email verification token.
+   * Dispatches email verification link.
    */
-  async requestEmailVerification(userId: string) {
+  async sendVerificationEmail(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, verified: true },
+      include: { profile: { select: { fullName: true } } },
     });
 
-    if (!user) throw ApiError.notFound('User');
-    if (user.verified) {
-      return { success: true, message: 'Your email address is already verified.' };
+    if (!user) {
+      throw ApiError.notFound('User');
     }
 
     const plainToken = crypto.randomBytes(32).toString('hex');
@@ -162,7 +155,8 @@ export const passwordResetService = {
       },
     });
 
-    const emailResult = await emailService.sendVerificationEmail(user.email, user.name, plainToken);
+    const fullName = user.profile?.fullName ?? user.email;
+    const emailResult = await emailService.sendVerificationEmail(user.email, fullName, plainToken);
 
     return {
       success: true,
@@ -185,7 +179,7 @@ export const passwordResetService = {
     const tokenRecord = await prisma.verificationToken.findUnique({
       where: { tokenHash },
       include: {
-        user: { select: { id: true, universityId: true } },
+        user: true,
       },
     });
 
@@ -193,7 +187,7 @@ export const passwordResetService = {
       throw ApiError.badRequest('Invalid or unrecognized email verification token.');
     }
 
-    if (tokenRecord.consumedAt !== null) {
+    if (tokenRecord.usedAt !== null) {
       throw ApiError.badRequest('This verification link has already been used.');
     }
 
@@ -204,21 +198,23 @@ export const passwordResetService = {
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: tokenRecord.user.id },
-        data: { verified: true },
+        data: {
+          emailVerifiedAt: new Date(),
+          status: UserStatus.ACTIVE,
+        },
       });
 
       await tx.verificationToken.update({
         where: { id: tokenRecord.id },
-        data: { consumedAt: new Date() },
+        data: { usedAt: new Date() },
       });
+    });
 
-      await auditLogRepository.record({
-        universityId: tokenRecord.user.universityId,
-        actorId: tokenRecord.user.id,
-        action: 'auth.email_verified',
-        targetType: 'user',
-        targetId: tokenRecord.user.id,
-      });
+    await auditLogModel.record({
+      actorId: tokenRecord.user.id,
+      action: 'EMAIL_VERIFIED',
+      targetType: 'User',
+      targetId: tokenRecord.user.id,
     });
 
     return {

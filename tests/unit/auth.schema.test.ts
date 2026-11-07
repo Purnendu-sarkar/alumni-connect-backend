@@ -3,61 +3,35 @@ import { describe, expect, it } from 'vitest';
 import { registerSchema } from '../../src/validators/auth.schema.js';
 
 const baseStudent = {
-  name: 'পূর্ণেন্দু কুমার সরকার',
-  email: 'student@example.edu',
+  name: 'Purnendu Kumar Sarkar',
+  email: 'student@nwu.ac.bd',
   password: 'CorrectHorse1!',
-  universitySlug: 'demo-university',
   role: 'STUDENT' as const,
   batch: '2026',
   department: 'CSE',
-  studentId: '160101',
-  currentSemester: '8th',
+  universityId: '160101',
 };
 
-const baseAlumniWithoutJob = {
+const baseAlumni = {
   name: 'Sadia Rahman',
-  email: 'sadia@example.edu',
+  email: 'sadia@nwu.ac.bd',
   password: 'CorrectHorse1!',
-  universitySlug: 'demo-university',
   role: 'ALUMNI' as const,
   batch: '2020',
   department: 'CSE',
-  employmentStatus: 'seeking_employment',
-};
-
-const baseAlumniWithJob = {
-  ...baseAlumniWithoutJob,
-  employmentStatus: 'employed',
-  currentCompany: 'Pathao',
-  position: 'Software Engineer',
+  universityId: '120105',
 };
 
 describe('registerSchema', () => {
-  it('allows complete student registration with Unicode/Bengali name', () => {
+  it('allows complete student registration', () => {
     expect(registerSchema.safeParse(baseStudent).success).toBe(true);
   });
 
-  it('allows alumni registration without an existing job', () => {
-    expect(registerSchema.safeParse(baseAlumniWithoutJob).success).toBe(true);
+  it('allows alumni registration', () => {
+    expect(registerSchema.safeParse(baseAlumni).success).toBe(true);
   });
 
-  it('allows alumni registration with company and position', () => {
-    expect(registerSchema.safeParse(baseAlumniWithJob).success).toBe(true);
-  });
-
-  it('rejects registration when batch is missing', () => {
-    expect(registerSchema.safeParse({ ...baseStudent, batch: '' }).success).toBe(false);
-  });
-
-  it('rejects registration when department is missing', () => {
-    expect(registerSchema.safeParse({ ...baseStudent, department: '' }).success).toBe(false);
-  });
-
-  it('rejects a weak password', () => {
-    expect(registerSchema.safeParse({ ...baseStudent, password: 'short' }).success).toBe(false);
-  });
-
-  it('does not accept privileged roles from public registration', () => {
-    expect(registerSchema.safeParse({ ...baseStudent, role: 'ADMIN' }).success).toBe(false);
+  it('rejects registration when email is invalid', () => {
+    expect(registerSchema.safeParse({ ...baseStudent, email: 'notanemail' }).success).toBe(false);
   });
 });

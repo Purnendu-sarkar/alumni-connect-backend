@@ -1,401 +1,1175 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-enum RoleName {
+// ======================= ENUMS =======================
+enum Role {
   STUDENT
   ALUMNI
   MODERATOR
-  ADMIN
   SUPER_ADMIN
 }
-
+enum UserStatus {
+  PENDING_EMAIL_VERIFICATION
+  PENDING_ADMIN_VERIFICATION
+  PENDING_SETUP
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+  VERIFICATION_REJECTED
+  DELETION_PENDING
+  DELETED
+}
 enum VerificationStatus {
+  NOT_REQUIRED
   PENDING
   APPROVED
   REJECTED
+  REVOKED
 }
-
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  ACCOUNT_SETUP
+}
+enum Visibility {
+  ONLY_ME
+  CONNECTIONS
+  VERIFIED_MEMBERS
+}
+enum MessagingPermission {
+  CONNECTIONS_ONLY
+  VERIFIED_MEMBERS
+}
+enum MentorshipAvailability {
+  OPEN
+  CLOSED
+}
 enum ConnectionStatus {
   PENDING
   ACCEPTED
-  DECLINED
+  REJECTED
+  CANCELLED
+  BLOCKED
 }
-
 enum MentorshipStatus {
-  PENDING
-  ACCEPTED
-  DECLINED
+  REQUESTED
+  CLARIFICATION_REQUESTED
+  ACTIVE
   COMPLETED
+  CANCELLED
+  REJECTED
 }
-
+enum MentorshipEventType {
+  REQUESTED
+  CLARIFICATION_REQUESTED
+  CLARIFICATION_REPLIED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  ENDED
+}
+enum CommunicationMethod {
+  EMAIL
+  CHAT
+  VIDEO_CALL
+  IN_PERSON
+}
 enum JobStatus {
-  PENDING
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
   APPROVED
   REJECTED
+  PUBLISHED
   CLOSED
 }
-
-enum ContentStatus {
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  CONTRACT
+}
+enum WorkMode {
+  ON_SITE
+  REMOTE
+  HYBRID
+}
+enum ExperienceLevel {
+  ANY
+  ENTRY
+  MID
+  SENIOR
+}
+enum JobModerationAction {
+  SUBMITTED
+  CLAIMED
+  CLAIM_RELEASED
+  CLAIM_EXPIRED
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  WITHDRAWN
+  RESUBMITTED
+  UNPUBLISHED
+  CLOSED
+}
+enum ModerationReasonCode {
+  SPAM
+  MISLEADING
+  INCOMPLETE
+  POLICY
+  INAPPROPRIATE
+  COPYRIGHT
+  OTHER
+}
+enum ApplicationStatus {
+  APPLIED
+  UNDER_REVIEW
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+  WITHDRAWN
+}
+enum EventMode {
+  IN_PERSON
+  ONLINE
+  HYBRID
+}
+enum EventStatus {
   DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+enum RsvpStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+  WAITLISTED
+  CANCELLED
+}
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
   PUBLISHED
   ARCHIVED
 }
-
+enum AnnouncementCategory {
+  GENERAL
+  ACADEMIC
+  CAREER
+  EVENT
+  SYSTEM
+}
+enum Audience {
+  ALL
+  STUDENTS
+  ALUMNI
+  MODERATORS
+}
+enum StoryStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+  PUBLISHED
+  UNPUBLISHED
+}
+enum StoryModerationAction {
+  SUBMITTED
+  CLAIMED
+  CLAIM_RELEASED
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  WITHDRAWN
+  RESUBMITTED
+  UNPUBLISHED
+  RESTORED
+}
+enum NotificationType {
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  MENTORSHIP_REQUEST
+  MENTORSHIP_ACCEPTED
+  MENTORSHIP_REJECTED
+  MENTORSHIP_CLARIFICATION
+  MENTORSHIP_ENDED
+  JOB_APPROVED
+  JOB_REJECTED
+  JOB_CHANGES_REQUESTED
+  APPLICATION_RECEIVED
+  APPLICATION_UPDATE
+  STORY_APPROVED
+  STORY_REJECTED
+  STORY_CHANGES_REQUESTED
+  STORY_UNPUBLISHED
+  EVENT_REMINDER
+  EVENT_UPDATED
+  EVENT_CANCELLED
+  ANNOUNCEMENT
+  MODERATION_RESULT
+  ACCOUNT_VERIFICATION
+  VERIFICATION_PENDING
+  SECURITY_ALERT
+  CLAIM_EXPIRED
+  WATCHLIST_ALERT
+  ESCALATION
+  ESCALATION_RESOLVED
+  RESTRICTION_APPLIED
+  RESTRICTION_ENDED
+  WARNING
+  MODERATOR_ALERT
+  SYSTEM_BROADCAST
+}
+enum BroadcastStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+  FAILED
+}
+enum BroadcastCategory {
+  INFO
+  IMPORTANT
+  SECURITY
+}
+enum ConversationContext {
+  DIRECT
+  MENTORSHIP
+  JOB_APPLICATION
+}
+enum ReportType {
+  INAPPROPRIATE_CONTENT
+  FAKE_PROFILE
+  SPAM
+  MISLEADING_JOB
+  HARASSMENT
+  OTHER
+}
+enum ReportTargetType {
+  USER
+  JOB
+  STORY
+  MESSAGE
+}
 enum ReportStatus {
-  OPEN
-  REVIEWED
+  SUBMITTED
+  UNDER_REVIEW
   RESOLVED
+  REJECTED
+}
+enum ReportActionType {
+  CLAIMED
+  NOTE
+  NONE
+  HIDE_CONTENT
+  WARN_USER
+  RESTRICT_USER
+  ESCALATE
+  RESOLVED
+  REJECTED
+  OVERTURNED
+  TAKEN_OVER
+  REASSIGNED
+}
+enum RestrictionType {
+  MESSAGING
+  JOB_POSTING
+  MENTORSHIP_REQUESTS
+}
+enum WatchlistStatus {
+  OPEN
   DISMISSED
 }
-
-enum MediaType {
-  IMAGE
-  VIDEO
-  DOCUMENT
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  EXPIRED
+}
+enum UploadPurpose {
+  PROFILE_PHOTO
+  RESUME
+  STORY_IMAGE
+  EVENT_BANNER
+  UNIVERSITY_LOGO
 }
 
-model University {
-  id               String             @id @default(cuid())
-  name             String
-  slug             String             @unique
-  domain           String             @unique
-  branding         Json?
-  subscriptionPlan String             @default("free")
-  isActive         Boolean            @default(true)
-  isDemo           Boolean            @default(false)
-  users            User[]
-  refreshTokens    RefreshToken[]
-  connections      Connection[]
-  mentorships      MentorshipRequest[]
-  jobs             Job[]
-  events           Event[]
-  contents         Content[]
-  reports          Report[]
-  mediaAssets      MediaAsset[]
-  adSlots          AdSlot[]
-  analyticsEvents  AnalyticsEvent[]
-  auditLogs        AuditLog[]
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-
-  @@index([isDemo])
-}
-
+// ================= IDENTITY & AUTH =================
 model User {
-  id                  String              @id @default(cuid())
-  universityId        String
-  roleId              String
-  name                String
-  email               String              @unique
-  passwordHash        String
-  batch               String?
-  department          String?
-  currentCompany      String?
-  position            String?
-  bio                 String?
-  headline            String?
-  studentId           String?
-  currentSemester     String?
-  admissionYear       String?
-  expectedGraduationYear String?
-  graduationYear      String?
-  academicId          String?
-  employmentStatus    String?
-  location            String?
-  phone               String?
-  phonePublic         Boolean             @default(false)
-  linkedinUrl         String?
-  websiteUrl          String?
-  githubUrl           String?
-  skills              String[]            @default([])
-  interests           String[]            @default([])
-  avatarUrl           String?
-  verified            Boolean             @default(false)
-  verificationStatus  VerificationStatus  @default(PENDING)
-  rejectionReason     String?
-  verifiedAt          DateTime?
-  onboardingCompleted Boolean             @default(false)
-  isActive            Boolean             @default(true)
-  isDemo              Boolean             @default(false)
-  university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
-  role                Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  refreshTokens       RefreshToken[]
-  verificationTokens  VerificationToken[]
-  sentConnections     Connection[]        @relation("ConnectionRequester")
-  receivedConnections Connection[]        @relation("ConnectionRecipient")
-  mentoringRequests   MentorshipRequest[] @relation("Mentor")
-  menteeRequests      MentorshipRequest[] @relation("Mentee")
-  jobsPosted          Job[]               @relation("JobPoster")
-  jobsApproved        Job[]               @relation("JobApprover")
-  jobApplications     JobApplication[]
-  reportsFiled        Report[]            @relation("ReportReporter")
-  eventsCreated       Event[]             @relation("EventCreator")
-  contentsCreated     Content[]           @relation("ContentCreator")
-  mediaUploaded       MediaAsset[]        @relation("MediaUploader")
-  analyticsEvents     AnalyticsEvent[]
-  auditLogs           AuditLog[]          @relation("AuditActor")
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                 String             @id @default(uuid()) @db.Uuid
+  email              String             @unique @db.VarChar(254)
+  universityId       String?            @unique @db.VarChar(40)
+  passwordHash       String             @db.VarChar(255)
+  role               Role
+  status             UserStatus         @default(PENDING_EMAIL_VERIFICATION)
+  verificationStatus VerificationStatus @default(NOT_REQUIRED)
+  emailVerifiedAt    DateTime?          @db.Timestamptz(6)
+  verifiedAt         DateTime?          @db.Timestamptz(6)
+  verifiedById       String?            @db.Uuid
+  verificationNote   String?            @db.VarChar(500)
+  suspendedAt        DateTime?          @db.Timestamptz(6)
+  suspendedUntil     DateTime?          @db.Timestamptz(6)
+  suspendReason      String?            @db.VarChar(500)
+  suspendedById      String?            @db.Uuid
+  mustChangePassword Boolean            @default(false)
+  passwordChangedAt  DateTime?          @db.Timestamptz(6)
+  lastLoginAt        DateTime?          @db.Timestamptz(6)
+  deactivatedAt      DateTime?          @db.Timestamptz(6)
+  deletionRequestedAt DateTime?         @db.Timestamptz(6)
+  deletedAt          DateTime?          @db.Timestamptz(6)
+  anonymizedAt       DateTime?          @db.Timestamptz(6)
+  version            Int                @default(1)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
 
-  @@index([universityId, roleId, verified])
-  @@index([universityId, verificationStatus])
-  @@index([universityId, roleId, verificationStatus])
-  @@index([universityId, department, batch])
-  @@index([universityId, currentCompany])
-  @@index([isDemo])
-  @@index([universityId, isDemo])
-}
+  verifiedBy    User?  @relation("UserVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedUsers User[] @relation("UserVerifier")
 
-model Role {
-  id          String       @id @default(cuid())
-  name        RoleName     @unique
-  description String?
-  permissions Permission[]
-  users       User[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  profile            Profile?
+  privacy            PrivacySetting?
+  notificationPrefs  NotificationPreference[]
+  sessions           Session[]
+  loginHistory       LoginHistory[]
+  tokens             VerificationToken[]
+  notifications      Notification[]
+  exportRequests     DataExportRequest[]
+
+  connectionsSent     Connection[] @relation("ConnectionRequester")
+  connectionsReceived Connection[] @relation("ConnectionReceiver")
+  blocksMade          UserBlock[]  @relation("Blocker")
+  blocksReceived      UserBlock[]  @relation("Blocked")
+
+  mentorshipsAsStudent MentorshipRequest[] @relation("MentorshipStudent")
+  mentorshipsAsAlumni  MentorshipRequest[] @relation("MentorshipAlumni")
+  mentorshipEvents     MentorshipEvent[]   @relation("MentorshipEventActor")
+
+  jobsOwned        Job[]                         @relation("JobOwner")
+  jobsReviewing    Job[]                         @relation("JobReviewer")
+  jobModerations   JobModerationRecord[]         @relation("JobModActor")
+  applications     JobApplication[]              @relation("ApplicationApplicant")
+  applicationSteps JobApplicationStatusHistory[] @relation("AppHistoryActor")
+
+  eventsCreated  Event[]        @relation("EventCreator")
+  rsvps          EventRsvp[]    @relation("RsvpUser")
+  announcements  Announcement[] @relation("AnnouncementAuthor")
+
+  stories          SuccessStory[]          @relation("StoryAuthor")
+  storiesReviewing SuccessStory[]          @relation("StoryReviewer")
+  storyModerations StoryModerationRecord[] @relation("StoryModActor")
+
+  broadcasts            Broadcast[]               @relation("BroadcastCreator")
+  conversationsCreated  Conversation[]            @relation("ConversationCreator")
+  participations        ConversationParticipant[] @relation("ParticipantUser")
+  messagesSent          Message[]                 @relation("MessageSender")
+
+  reportsFiled     Report[]       @relation("ReportReporter")
+  reportsAgainst   Report[]       @relation("ReportTarget")
+  reportsReviewing Report[]       @relation("ReportReviewer")
+  reportsResolved  Report[]       @relation("ReportResolver")
+  reportActions    ReportAction[] @relation("ReportActionActor")
+
+  restrictions        UserRestriction[] @relation("RestrictionSubject")
+  restrictionsCreated UserRestriction[] @relation("RestrictionCreator")
+  watchlistItems      WatchlistItem[]   @relation("WatchlistSubject")
+
+  uploads         UploadedFile[]  @relation("UploadOwner")
+  settingsUpdated SystemSetting[] @relation("SettingUpdater")
+
+  @@index([role, status])
+  @@index([status, createdAt])
+  @@index([verificationStatus, createdAt])
+  @@index([lastLoginAt])
+  @@map("users")
 }
 
 model Permission {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  description String?
-  roles       Role[]
-  createdAt   DateTime @default(now())
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(100)
+  description String?          @db.VarChar(255)
+  roles       RolePermission[]
+
+  @@map("permissions")
 }
 
-model RefreshToken {
-  id           String     @id
-  tokenHash    String     @unique
-  userId       String
-  universityId String
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  createdAt    DateTime   @default(now())
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+model RolePermission {
+  role         Role
+  permissionId String     @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  @@index([userId, expiresAt])
-  @@index([universityId])
+  @@id([role, permissionId])
+  @@map("role_permissions")
 }
 
-model Connection {
-  id          String           @id @default(cuid())
-  universityId String
-  requesterId String
-  recipientId String
-  status      ConnectionStatus @default(PENDING)
-  message     String?
-  respondedAt DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  university  University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  requester   User             @relation("ConnectionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient   User             @relation("ConnectionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  familyId         String    @db.Uuid
+  refreshTokenHash String    @unique @db.VarChar(128)
+  rotatedFromId    String?   @db.Uuid
+  ip               String?   @db.VarChar(64)
+  userAgent        String?   @db.VarChar(400)
+  deviceLabel      String?   @db.VarChar(120)
+  reauthUntil      DateTime? @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  lastUsedAt       DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt        DateTime  @db.Timestamptz(6)
+  revokedAt        DateTime? @db.Timestamptz(6)
+  revokedReason    String?   @db.VarChar(60)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([requesterId, recipientId])
-  @@index([universityId, status, createdAt])
-  @@index([recipientId, status])
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
-model MentorshipRequest {
-  id           String           @id @default(cuid())
-  universityId String
-  mentorId     String
-  menteeId     String
-  goals        String
-  status       MentorshipStatus @default(PENDING)
-  scheduledAt  DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  university   University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  mentor       User             @relation("Mentor", fields: [mentorId], references: [id], onDelete: Cascade)
-  mentee       User             @relation("Mentee", fields: [menteeId], references: [id], onDelete: Cascade)
+model LoginHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String?  @db.Uuid
+  emailHash     String   @db.VarChar(64)
+  ip            String?  @db.VarChar(64)
+  userAgent     String?  @db.VarChar(400)
+  success       Boolean
+  failureReason String?  @db.VarChar(60)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([universityId, status])
-  @@index([mentorId, status])
-}
-
-model Job {
-  id           String    @id @default(cuid())
-  universityId String
-  postedById   String
-  approvedById String?
-  title        String
-  description  String
-  company      String
-  location     String?
-  employmentType String?
-  applicationUrl String?
-  applicationEmail String?
-  status       JobStatus @default(PENDING)
-  expiresAt    DateTime?
-  approvedAt   DateTime?
-  rejectionReason String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  postedBy     User      @relation("JobPoster", fields: [postedById], references: [id], onDelete: Restrict)
-  approvedBy   User?     @relation("JobApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  applications JobApplication[]
-
-  @@index([universityId, status, createdAt])
-  @@index([universityId, company])
-}
-
-model JobApplication {
-  id        String   @id @default(cuid())
-  jobId     String
-  applicantId String
-  message   String?
-  createdAt DateTime @default(now())
-  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  applicant User     @relation(fields: [applicantId], references: [id], onDelete: Cascade)
-
-  @@unique([jobId, applicantId])
-  @@index([applicantId, createdAt])
-}
-
-model Event {
-  id           String     @id @default(cuid())
-  universityId String
-  createdById  String
-  title        String
-  description  String
-  slug         String
-  startsAt     DateTime
-  endsAt       DateTime?
-  location     String?
-  isPublished  Boolean    @default(false)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  createdBy    User       @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  media        MediaAsset[]
-
-  @@unique([universityId, slug])
-  @@index([universityId, startsAt])
-}
-
-model Content {
-  id           String        @id @default(cuid())
-  universityId String
-  createdById  String
-  type         String
-  title        String
-  body         String
-  slug         String
-  status       ContentStatus @default(DRAFT)
-  metaTitle    String?
-  metaDescription String?
-  publishedAt  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  university   University    @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  createdBy    User          @relation("ContentCreator", fields: [createdById], references: [id], onDelete: Restrict)
-
-  @@unique([universityId, slug])
-  @@index([universityId, status, publishedAt])
-}
-
-model Report {
-  id           String       @id @default(cuid())
-  universityId String
-  reportedById String
-  targetType   String
-  targetId     String
-  reason       String
-  status       ReportStatus @default(OPEN)
-  resolution   String?
-  resolvedAt   DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  university   University   @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  reportedBy   User         @relation("ReportReporter", fields: [reportedById], references: [id], onDelete: Restrict)
-
-  @@index([universityId, status, createdAt])
-  @@index([targetType, targetId])
-}
-
-model MediaAsset {
-  id           String     @id @default(cuid())
-  universityId String
-  uploadedById String
-  eventId      String?
-  url          String
-  providerKey  String?
-  type         MediaType
-  bytes        Int?
-  createdAt    DateTime   @default(now())
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  uploadedBy   User       @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
-  event        Event?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
-
-  @@index([universityId, createdAt])
-  @@index([eventId])
-}
-
-model AdSlot {
-  id           String     @id @default(cuid())
-  universityId String
-  position     String
-  sponsor      String
-  content      Json
-  isActive     Boolean    @default(true)
-  startsAt     DateTime
-  endsAt       DateTime
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-
-  @@index([universityId, position, isActive])
-}
-
-model AnalyticsEvent {
-  id           String     @id @default(cuid())
-  universityId String
-  userId       String?
-  eventType    String
-  metadata     Json?
-  createdAt    DateTime   @default(now())
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([universityId, eventType, createdAt])
-}
-
-model AuditLog {
-  id           String     @id @default(cuid())
-  universityId String
-  actorId      String
-  action       String
-  targetType   String?
-  targetId     String?
-  metadata     Json?
-  createdAt    DateTime   @default(now())
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  actor        User       @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
-
-  @@index([universityId, createdAt])
-  @@index([actorId, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([emailHash, createdAt(sort: Desc)])
+  @@index([success, createdAt(sort: Desc)])
+  @@map("login_history")
 }
 
 model VerificationToken {
-  id         String    @id @default(cuid())
-  userId     String
-  tokenHash  String    @unique
-  type       String
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  type      TokenType
+  tokenHash String    @unique @db.VarChar(128)
+  otpHash   String?   @db.VarChar(128)
+  attempts  Int       @default(0)
+  expiresAt DateTime  @db.Timestamptz(6)
+  usedAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, type])
-  @@index([tokenHash])
+  @@index([userId, type, usedAt])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+// ================= PROFILE & PRIVACY =================
+model Profile {
+  id                String                 @id @default(uuid()) @db.Uuid
+  userId            String                 @unique @db.Uuid
+  fullName          String                 @db.VarChar(100)
+  department        String?                @db.VarChar(100)
+  program           String?                @db.VarChar(100)
+  degree            String?                @db.VarChar(100)
+  batch             Int?
+  graduationYear    Int?
+  bio               String?                @db.VarChar(500)
+  skills            String[]
+  interests         String[]
+  careerGoal        String?                @db.VarChar(200)
+  currentJob        String?                @db.VarChar(100)
+  company           String?                @db.VarChar(100)
+  industry          String?                @db.VarChar(100)
+  location          String?                @db.VarChar(100)
+  phone             String?                @db.VarChar(30)
+  links             Json?
+  photoKey          String?                @db.VarChar(255)
+  mentorshipStatus  MentorshipAvailability @default(CLOSED)
+  mentorshipTopics  String[]
+  maxActiveMentees  Int                    @default(5)
+  completeness      Int                    @default(0)
+  createdAt         DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(6)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experiences Experience[]
+
+  @@index([department])
+  @@index([graduationYear])
+  @@index([batch])
+  @@index([industry])
+  @@index([mentorshipStatus])
+  @@index([skills], type: Gin)
+  @@map("profiles")
+}
+
+model Experience {
+  id          String    @id @default(uuid()) @db.Uuid
+  profileId   String    @db.Uuid
+  title       String    @db.VarChar(100)
+  company     String    @db.VarChar(100)
+  startDate   DateTime  @db.Date
+  endDate     DateTime? @db.Date
+  description String?   @db.VarChar(1000)
+  sortOrder   Int       @default(0)
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, sortOrder])
+  @@map("experiences")
+}
+
+model PrivacySetting {
+  id                  String              @id @default(uuid()) @db.Uuid
+  userId              String              @unique @db.Uuid
+  profileVis          Visibility          @default(VERIFIED_MEMBERS)
+  emailVis            Visibility          @default(ONLY_ME)
+  phoneVis            Visibility          @default(ONLY_ME)
+  locationVis         Visibility          @default(CONNECTIONS)
+  careerVis           Visibility          @default(VERIFIED_MEMBERS)
+  educationVis        Visibility          @default(VERIFIED_MEMBERS)
+  connectionsVis      Visibility          @default(ONLY_ME)
+  mentorshipVis       Visibility          @default(VERIFIED_MEMBERS)
+  searchVis           Visibility          @default(VERIFIED_MEMBERS)
+  messagingPermission MessagingPermission @default(CONNECTIONS_ONLY)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(6)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("privacy_settings")
+}
+
+model NotificationPreference {
+  id     String           @id @default(uuid()) @db.Uuid
+  userId String           @db.Uuid
+  type   NotificationType
+  inApp  Boolean          @default(true)
+  email  Boolean          @default(true)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@map("notification_preferences")
+}
+
+// ================= NETWORKING =================
+model Connection {
+  id          String           @id @default(uuid()) @db.Uuid
+  requesterId String           @db.Uuid
+  receiverId  String           @db.Uuid
+  userLowId   String           @db.Uuid
+  userHighId  String           @db.Uuid
+  status      ConnectionStatus @default(PENDING)
+  note        String?          @db.VarChar(200)
+  respondedAt DateTime?        @db.Timestamptz(6)
+  rejectedAt  DateTime?        @db.Timestamptz(6)
+  cancelledAt DateTime?        @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
+
+  requester User @relation("ConnectionRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  receiver  User @relation("ConnectionReceiver", fields: [receiverId], references: [id], onDelete: Restrict)
+
+  @@unique([userLowId, userHighId])
+  @@index([receiverId, status])
+  @@index([requesterId, status])
+  @@index([status, updatedAt])
+  @@map("connections")
+}
+
+model UserBlock {
+  id        String   @id @default(uuid()) @db.Uuid
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  reason    String?  @db.VarChar(200)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Restrict)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Restrict)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("user_blocks")
+}
+
+// ================= MENTORSHIP =================
+model MentorshipRequest {
+  id                    String              @id @default(uuid()) @db.Uuid
+  studentId             String              @db.Uuid
+  alumniId              String              @db.Uuid
+  topic                 String              @db.VarChar(150)
+  careerGoal            String              @db.VarChar(300)
+  message               String              @db.VarChar(1000)
+  preferredCommunication CommunicationMethod
+  availability          String              @db.VarChar(300)
+  expectedDurationWeeks Int?
+  status                MentorshipStatus    @default(REQUESTED)
+  decisionNote          String?             @db.VarChar(500)
+  clarificationQuestion String?             @db.VarChar(1000)
+  clarificationReply    String?             @db.VarChar(1000)
+  alumniNote            String?             @db.VarChar(2000)
+  endNote               String?             @db.VarChar(500)
+  endedById             String?             @db.Uuid
+  respondedAt           DateTime?           @db.Timestamptz(6)
+  startedAt             DateTime?           @db.Timestamptz(6)
+  endedAt               DateTime?           @db.Timestamptz(6)
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime            @updatedAt @db.Timestamptz(6)
+
+  student User              @relation("MentorshipStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  alumni  User              @relation("MentorshipAlumni", fields: [alumniId], references: [id], onDelete: Restrict)
+  events  MentorshipEvent[]
+
+  @@index([alumniId, status])
+  @@index([studentId, status])
+  @@index([status, updatedAt])
+  @@map("mentorship_requests")
+}
+
+model MentorshipEvent {
+  id            String              @id @default(uuid()) @db.Uuid
+  mentorshipId  String              @db.Uuid
+  actorId       String              @db.Uuid
+  type          MentorshipEventType
+  note          String?             @db.VarChar(1000)
+  createdAt     DateTime            @default(now()) @db.Timestamptz(6)
+
+  mentorship MentorshipRequest @relation(fields: [mentorshipId], references: [id], onDelete: Cascade)
+  actor      User              @relation("MentorshipEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([mentorshipId, createdAt])
+  @@map("mentorship_events")
+}
+
+// ================= JOBS =================
+model Job {
+  id                 String          @id @default(uuid()) @db.Uuid
+  ownerId            String          @db.Uuid
+  title              String          @db.VarChar(120)
+  company            String          @db.VarChar(100)
+  description        String          @db.Text
+  requirements       String?         @db.Text
+  category           String          @db.VarChar(60)
+  employmentType     EmploymentType
+  workMode           WorkMode
+  location           String?         @db.VarChar(100)
+  experienceLevel    ExperienceLevel @default(ANY)
+  salaryMin          Int?
+  salaryMax          Int?
+  salaryCurrency     String?         @db.VarChar(3)
+  deadline           DateTime?       @db.Timestamptz(6)
+  referralAvailable  Boolean         @default(false)
+  requireResume      Boolean         @default(false)
+  requireCoverLetter Boolean         @default(false)
+  status             JobStatus       @default(DRAFT)
+  submittedAt        DateTime?       @db.Timestamptz(6)
+  reviewerId         String?         @db.Uuid
+  claimedAt          DateTime?       @db.Timestamptz(6)
+  publishedAt        DateTime?       @db.Timestamptz(6)
+  closedAt           DateTime?       @db.Timestamptz(6)
+  closedById         String?         @db.Uuid
+  closedReason       String?         @db.VarChar(500)
+  version            Int             @default(1)
+  deletedAt          DateTime?       @db.Timestamptz(6)
+  createdAt          DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime        @updatedAt @db.Timestamptz(6)
+
+  owner         User                  @relation("JobOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  reviewer      User?                 @relation("JobReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  moderations   JobModerationRecord[]
+  applications  JobApplication[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([status, submittedAt])
+  @@index([ownerId, status])
+  @@index([reviewerId, status])
+  @@index([category])
+  @@index([deadline])
+  @@map("jobs")
+}
+
+model JobModerationRecord {
+  id                  String               @id @default(uuid()) @db.Uuid
+  jobId               String               @db.Uuid
+  actorId             String               @db.Uuid
+  actorRole           Role
+  action              JobModerationAction
+  reasonCode          ModerationReasonCode?
+  ownerVisibleNote    String?              @db.VarChar(1000)
+  internalNote        String?              @db.VarChar(1000)
+  overrideOfReviewerId String?             @db.Uuid
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+
+  job   Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  actor User @relation("JobModActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([jobId, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@map("job_moderation_records")
+}
+
+model JobApplication {
+  id                  String            @id @default(uuid()) @db.Uuid
+  jobId               String            @db.Uuid
+  applicantId         String            @db.Uuid
+  coverLetter         String?           @db.VarChar(2000)
+  resumeKey           String?           @db.VarChar(255)
+  shareProfileConsent Boolean           @default(true)
+  profileSnapshot     Json?
+  status              ApplicationStatus @default(APPLIED)
+  ownerNote           String?           @db.VarChar(1000)
+  withdrawnAt         DateTime?         @db.Timestamptz(6)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
+
+  job       Job                           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicant User                          @relation("ApplicationApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  history   JobApplicationStatusHistory[]
+
+  @@unique([jobId, applicantId])
+  @@index([applicantId, status])
+  @@index([jobId, status])
+  @@index([createdAt])
+  @@map("job_applications")
+}
+
+model JobApplicationStatusHistory {
+  id            String             @id @default(uuid()) @db.Uuid
+  applicationId String             @db.Uuid
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  actorId       String             @db.Uuid
+  note          String?            @db.VarChar(500)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actor       User           @relation("AppHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt])
+  @@map("job_application_status_history")
+}
+
+// ================= EVENTS =================
+model Event {
+  id               String      @id @default(uuid()) @db.Uuid
+  createdById      String      @db.Uuid
+  title            String      @db.VarChar(120)
+  description      String      @db.Text
+  category         String      @db.VarChar(60)
+  organizer        String?     @db.VarChar(100)
+  mode             EventMode
+  venue            String?     @db.VarChar(150)
+  onlineUrl        String?     @db.VarChar(500)
+  startsAt         DateTime    @db.Timestamptz(6)
+  endsAt           DateTime    @db.Timestamptz(6)
+  rsvpDeadline     DateTime?   @db.Timestamptz(6)
+  capacity         Int?
+  waitlistEnabled  Boolean     @default(true)
+  bannerKey        String?     @db.VarChar(255)
+  status           EventStatus @default(DRAFT)
+  reminderEnabled  Boolean     @default(true)
+  reminderSentAt   DateTime?   @db.Timestamptz(6)
+  publishedAt      DateTime?   @db.Timestamptz(6)
+  cancelledAt      DateTime?   @db.Timestamptz(6)
+  cancelReason     String?     @db.VarChar(500)
+  completedAt      DateTime?   @db.Timestamptz(6)
+  version          Int         @default(1)
+  deletedAt        DateTime?   @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @db.Timestamptz(6)
+
+  createdBy User        @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  rsvps     EventRsvp[]
+
+  @@index([status, startsAt])
+  @@index([category])
+  @@index([createdById])
+  @@map("events")
+}
+
+model EventRsvp {
+  id           String     @id @default(uuid()) @db.Uuid
+  eventId      String     @db.Uuid
+  userId       String     @db.Uuid
+  status       RsvpStatus
+  waitlistedAt DateTime?  @db.Timestamptz(6)
+  attendedAt   DateTime?  @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation("RsvpUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, userId])
+  @@index([eventId, status])
+  @@index([userId, status])
+  @@map("event_rsvps")
+}
+
+// ================= ANNOUNCEMENTS =================
+model Announcement {
+  id          String               @id @default(uuid()) @db.Uuid
+  authorId    String               @db.Uuid
+  title       String               @db.VarChar(120)
+  body        String               @db.Text
+  category    AnnouncementCategory @default(GENERAL)
+  audience    Audience             @default(ALL)
+  pinned      Boolean              @default(false)
+  status      AnnouncementStatus   @default(DRAFT)
+  publishAt   DateTime?            @db.Timestamptz(6)
+  archiveAt   DateTime?            @db.Timestamptz(6)
+  publishedAt DateTime?            @db.Timestamptz(6)
+  archivedAt  DateTime?            @db.Timestamptz(6)
+  editedAt    DateTime?            @db.Timestamptz(6)
+  version     Int                  @default(1)
+  deletedAt   DateTime?            @db.Timestamptz(6)
+  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @db.Timestamptz(6)
+
+  author User @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([status, pinned, publishedAt(sort: Desc)])
+  @@index([status, publishAt])
+  @@index([status, archiveAt])
+  @@index([category])
+  @@map("announcements")
+}
+
+// ================= SUCCESS STORIES =================
+model SuccessStory {
+  id            String      @id @default(uuid()) @db.Uuid
+  authorId      String      @db.Uuid
+  title         String      @db.VarChar(120)
+  summary       String      @db.VarChar(300)
+  body          String      @db.Text
+  coverImageKey String?     @db.VarChar(255)
+  status        StoryStatus @default(DRAFT)
+  submittedAt   DateTime?   @db.Timestamptz(6)
+  reviewerId    String?     @db.Uuid
+  claimedAt     DateTime?   @db.Timestamptz(6)
+  publishedAt   DateTime?   @db.Timestamptz(6)
+  version       Int         @default(1)
+  deletedAt     DateTime?   @db.Timestamptz(6)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
+
+  author      User                    @relation("StoryAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reviewer    User?                   @relation("StoryReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  moderations StoryModerationRecord[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([status, submittedAt])
+  @@index([authorId, status])
+  @@index([reviewerId, status])
+  @@map("success_stories")
+}
+
+model StoryModerationRecord {
+  id               String                @id @default(uuid()) @db.Uuid
+  storyId          String                @db.Uuid
+  actorId          String                @db.Uuid
+  actorRole        Role
+  action           StoryModerationAction
+  reasonCode       ModerationReasonCode?
+  ownerVisibleNote String?               @db.VarChar(1000)
+  internalNote     String?               @db.VarChar(1000)
+  createdAt        DateTime              @default(now()) @db.Timestamptz(6)
+
+  story SuccessStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  actor User         @relation("StoryModActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([storyId, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@map("story_moderation_records")
+}
+
+// ================= NOTIFICATIONS & BROADCASTS =================
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  userId      String           @db.Uuid
+  type        NotificationType
+  title       String           @db.VarChar(160)
+  body        String?          @db.VarChar(500)
+  link        String?          @db.VarChar(300)
+  metadata    Json?
+  broadcastId String?          @db.Uuid
+  readAt      DateTime?        @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcast Broadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([userId, type, createdAt(sort: Desc)])
+  @@index([broadcastId])
+  @@map("notifications")
+}
+
+model Broadcast {
+  id             String            @id @default(uuid()) @db.Uuid
+  createdById    String            @db.Uuid
+  title          String            @db.VarChar(120)
+  body           String            @db.VarChar(2000)
+  audience       Audience
+  channelInApp   Boolean           @default(true)
+  channelEmail   Boolean           @default(false)
+  category       BroadcastCategory @default(INFO)
+  link           String?           @db.VarChar(300)
+  scheduledAt    DateTime?         @db.Timestamptz(6)
+  sentAt         DateTime?         @db.Timestamptz(6)
+  status         BroadcastStatus   @default(SCHEDULED)
+  recipientCount Int               @default(0)
+  deliveredCount Int               @default(0)
+  failedCount    Int               @default(0)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @db.Timestamptz(6)
+
+  createdBy     User           @relation("BroadcastCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  notifications Notification[]
+
+  @@index([status, scheduledAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("broadcasts")
+}
+
+// ================= MESSAGING =================
+model Conversation {
+  id               String              @id @default(uuid()) @db.Uuid
+  userLowId        String              @db.Uuid
+  userHighId       String              @db.Uuid
+  createdById      String              @db.Uuid
+  contextType      ConversationContext @default(DIRECT)
+  contextId        String?             @db.Uuid
+  firstMessageOnly Boolean             @default(false)
+  lastMessageAt    DateTime?           @db.Timestamptz(6)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
+
+  createdBy    User                      @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@unique([userLowId, userHighId])
+  @@index([lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String    @db.Uuid
+  userId         String    @db.Uuid
+  lastReadAt     DateTime? @db.Timestamptz(6)
+  hiddenAt       DateTime? @db.Timestamptz(6)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, hiddenAt])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String    @id @default(uuid()) @db.Uuid
+  conversationId String    @db.Uuid
+  senderId       String    @db.Uuid
+  body           String    @db.VarChar(2000)
+  deletedAt      DateTime? @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+// ================= REPORTS & MODERATION =================
+model Report {
+  id             String           @id @default(uuid()) @db.Uuid
+  reporterId     String           @db.Uuid
+  type           ReportType
+  targetType     ReportTargetType
+  targetId       String           @db.Uuid
+  reportedUserId String?          @db.Uuid
+  description    String           @db.VarChar(1000)
+  snapshot       Json
+  status         ReportStatus     @default(SUBMITTED)
+  reviewerId     String?          @db.Uuid
+  claimedAt      DateTime?        @db.Timestamptz(6)
+  resolverId     String?          @db.Uuid
+  resolvedAt     DateTime?        @db.Timestamptz(6)
+  resolutionNote String?          @db.VarChar(1000)
+  escalatedAt    DateTime?        @db.Timestamptz(6)
+  escalatedById  String?          @db.Uuid
+  overturnedAt   DateTime?        @db.Timestamptz(6)
+  overturnedById String?          @db.Uuid
+  overturnReason String?          @db.VarChar(1000)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+
+  reporter     User              @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  reportedUser User?             @relation("ReportTarget", fields: [reportedUserId], references: [id], onDelete: Restrict)
+  reviewer     User?             @relation("ReportReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  resolver     User?             @relation("ReportResolver", fields: [resolverId], references: [id], onDelete: SetNull)
+  actions      ReportAction[]
+  restrictions UserRestriction[]
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reportedUserId, status])
+  @@index([reporterId, createdAt(sort: Desc)])
+  @@index([reviewerId, status])
+  @@index([escalatedAt])
+  @@map("reports")
+}
+
+model ReportAction {
+  id            String           @id @default(uuid()) @db.Uuid
+  reportId      String           @db.Uuid
+  actorId       String           @db.Uuid
+  actorRole     Role
+  actionType    ReportActionType
+  metadata      Json?
+  internalNote  String?          @db.VarChar(1000)
+  publicMessage String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(6)
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actor  User   @relation("ReportActionActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([reportId, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@map("report_actions")
+}
+
+model UserRestriction {
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @db.Uuid
+  type           RestrictionType
+  reason         String          @db.VarChar(500)
+  startsAt       DateTime        @default(now()) @db.Timestamptz(6)
+  endsAt         DateTime        @db.Timestamptz(6)
+  createdById    String          @db.Uuid
+  sourceReportId String?         @db.Uuid
+  revokedAt      DateTime?       @db.Timestamptz(6)
+  revokedById    String?         @db.Uuid
+  revokeReason   String?         @db.VarChar(500)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+
+  user         User    @relation("RestrictionSubject", fields: [userId], references: [id], onDelete: Restrict)
+  createdBy    User    @relation("RestrictionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  sourceReport Report? @relation(fields: [sourceReportId], references: [id], onDelete: SetNull)
+
+  @@index([userId, type, endsAt])
+  @@index([endsAt, revokedAt])
+  @@map("user_restrictions")
+}
+
+model WatchlistItem {
+  id            String          @id @default(uuid()) @db.Uuid
+  userId        String          @db.Uuid
+  ruleKey       String          @db.VarChar(60)
+  details       Json?
+  status        WatchlistStatus @default(OPEN)
+  dismissedById String?         @db.Uuid
+  dismissedAt   DateTime?       @db.Timestamptz(6)
+  dismissReason String?         @db.VarChar(200)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+
+  user User @relation("WatchlistSubject", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId, ruleKey, status])
+  @@map("watchlist_items")
+}
+
+// ================= AUDIT, SETTINGS, FILES, SYSTEM =================
+model AuditLog {
+  id         BigInt      @id @default(autoincrement())
+  actorId    String?     @db.Uuid
+  actorRole  Role?
+  action     String      @db.VarChar(60)
+  targetType String?     @db.VarChar(40)
+  targetId   String?     @db.VarChar(64)
+  result     AuditResult @default(SUCCESS)
+  ip         String?     @db.VarChar(64)
+  userAgent  String?     @db.VarChar(400)
+  requestId  String?     @db.VarChar(64)
+  metadata   Json?
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+  @@index([requestId])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  key         String   @id @db.VarChar(80)
+  value       Json
+  version     Int      @default(1)
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  updatedBy User? @relation("SettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("system_settings")
+}
+
+model DataExportRequest {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @db.Uuid
+  status      ExportStatus @default(PENDING)
+  fileKey     String?      @db.VarChar(255)
+  errorMessage String?     @db.VarChar(300)
+  requestedAt DateTime     @default(now()) @db.Timestamptz(6)
+  completedAt DateTime?    @db.Timestamptz(6)
+  expiresAt   DateTime?    @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@map("data_export_requests")
+}
+
+model UploadedFile {
+  id           String        @id @default(uuid()) @db.Uuid
+  ownerId      String        @db.Uuid
+  purpose      UploadPurpose
+  storageKey   String        @unique @db.VarChar(255)
+  mimeType     String        @db.VarChar(100)
+  sizeBytes    Int
+  sha256       String?       @db.VarChar(64)
+  originalName String?       @db.VarChar(200)
+  isPrivate    Boolean       @default(true)
+  deletedAt    DateTime?     @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+
+  owner User @relation("UploadOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, purpose])
+  @@index([deletedAt])
+  @@map("uploaded_files")
+}
+
+model IdempotencyKey {
+  key          String   @id @db.VarChar(100)
+  userId       String?  @db.Uuid
+  route        String   @db.VarChar(200)
+  responseCode Int?
+  responseHash String?  @db.VarChar(64)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt    DateTime @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("idempotency_keys")
 }

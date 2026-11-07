@@ -1,9 +1,10 @@
 import { Router } from 'express';
+import { Role } from '@prisma/client';
 
-import { PERMISSIONS } from '../constants/permissions.js';
-import { adminController } from '../controllers/admin.controller.js';
+import { adminPresenter } from '../presenters/admin.presenter.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
-import { requirePermission } from '../middlewares/permission.middleware.js';
+import { requireRole } from '../middlewares/permission.middleware.js';
+import { requireReauth } from '../middlewares/reauth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
   reviewVerificationSchema,
@@ -14,50 +15,22 @@ import {
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+adminRouter.use(requireRole(Role.SUPER_ADMIN));
 
 adminRouter.get(
   '/verifications',
-  requirePermission(PERMISSIONS.USER_VERIFY),
   validate(verificationQuerySchema, 'query'),
-  adminController.listVerifications,
+  adminPresenter.listVerifications,
 );
 
+// Review verification is a sensitive action: requires 15-minute reauth window
 adminRouter.patch(
   '/users/:userId/verification',
-  requirePermission(PERMISSIONS.USER_VERIFY),
+  requireReauth,
   validate(userIdParamSchema, 'params'),
   validate(reviewVerificationSchema),
-  adminController.reviewVerification,
+  adminPresenter.reviewVerification,
 );
 
-adminRouter.patch(
-  '/users/:userId/verify',
-  requirePermission(PERMISSIONS.USER_VERIFY),
-  validate(userIdParamSchema, 'params'),
-  adminController.verifyUser,
-);
-
-// Platform & University Management Endpoints
-adminRouter.get(
-  '/universities',
-  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
-  adminController.listUniversities,
-);
-
-adminRouter.post(
-  '/universities',
-  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
-  adminController.createUniversity,
-);
-
-adminRouter.patch(
-  '/universities/:id/status',
-  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
-  adminController.toggleUniversityStatus,
-);
-
-adminRouter.get(
-  '/stats',
-  adminController.getStats,
-);
-
+adminRouter.get('/stats', adminPresenter.getStats);
+adminRouter.get('/audit-logs', adminPresenter.listAuditLogs);

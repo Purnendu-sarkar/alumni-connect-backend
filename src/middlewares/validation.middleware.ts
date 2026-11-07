@@ -9,9 +9,11 @@ export function validate(schema: ZodType, part: RequestPart = 'body'): RequestHa
   return (request, _response, next) => {
     const parsed = schema.safeParse(request[part]);
     if (!parsed.success) {
-      return next(
-        new ApiError(422, 'Validation failed.', 'VALIDATION_ERROR', parsed.error.flatten()),
-      );
+      const errors = parsed.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }));
+      return next(ApiError.validation(errors));
     }
 
     Object.defineProperty(request, part, {

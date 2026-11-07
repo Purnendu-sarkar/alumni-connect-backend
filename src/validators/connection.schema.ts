@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
 export const createConnectionSchema = z.object({
-  recipientId: z.string().cuid(),
-  message: z.string().trim().min(1).max(1_000).optional(),
+  receiverId: z.string().min(1, 'Target member ID is required.'),
+  note: z.string().trim().max(200, 'Connection note cannot exceed 200 characters.').optional(),
 });
 
-export const connectionIdParamSchema = z.object({ id: z.string().cuid() });
+export const connectionIdParamSchema = z.object({
+  id: z.string().min(1, 'Connection ID is required.'),
+});
 
 export const respondConnectionSchema = z.object({
-  status: z.enum(['ACCEPTED', 'DECLINED']),
+  action: z.enum(['ACCEPT', 'REJECT']),
 });

@@ -1,74 +1,34 @@
 import { Router } from 'express';
 
 import { PERMISSIONS } from '../constants/permissions.js';
-import { jobController } from '../controllers/job.controller.js';
+import { jobPresenter } from '../presenters/job.presenter.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { requirePermission } from '../middlewares/permission.middleware.js';
-import { requireTenant, resolveTenant } from '../middlewares/tenant.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
-import { paginationQuerySchema } from '../utils/pagination.js';
 import {
   applyJobSchema,
   createJobSchema,
   jobIdParamSchema,
-  jobQuerySchema,
-  reviewJobSchema,
+  moderateJobSchema,
 } from '../validators/job.schema.js';
 
 export const jobRouter = Router();
 
-jobRouter.get(
-  '/',
-  resolveTenant,
-  requireTenant,
-  validate(jobQuerySchema, 'query'),
-  jobController.listPublished,
-);
-jobRouter.get(
-  '/pending',
-  authenticate,
-  requirePermission(PERMISSIONS.JOB_REVIEW),
-  validate(paginationQuerySchema, 'query'),
-  jobController.listPending,
-);
-jobRouter.get(
-  '/mine',
-  authenticate,
-  jobController.listMine,
-);
+jobRouter.use(authenticate);
+
+jobRouter.get('/', jobPresenter.listActiveJobs);
+jobRouter.post('/', validate(createJobSchema), jobPresenter.createJob);
+jobRouter.get('/:id', validate(jobIdParamSchema, 'params'), jobPresenter.getJobById);
 jobRouter.post(
-  '/',
-  authenticate,
-  requirePermission(PERMISSIONS.JOB_CREATE),
-  validate(createJobSchema),
-  jobController.create,
-);
-jobRouter.get(
-  '/:id',
-  validate(jobIdParamSchema, 'params'),
-  jobController.getById,
-);
-jobRouter.patch(
-  '/:id/review',
-  authenticate,
-  requirePermission(PERMISSIONS.JOB_REVIEW),
-  validate(jobIdParamSchema, 'params'),
-  validate(reviewJobSchema),
-  jobController.review,
-);
-jobRouter.patch(
-  '/:id/status',
-  authenticate,
-  requirePermission(PERMISSIONS.JOB_REVIEW),
-  validate(jobIdParamSchema, 'params'),
-  validate(reviewJobSchema),
-  jobController.review,
-);
-jobRouter.post(
-  '/:id/applications',
-  authenticate,
-  requirePermission(PERMISSIONS.JOB_APPLY),
+  '/:id/apply',
   validate(jobIdParamSchema, 'params'),
   validate(applyJobSchema),
-  jobController.apply,
+  jobPresenter.applyToJob,
+);
+jobRouter.patch(
+  '/:id/moderate',
+  requirePermission(PERMISSIONS.JOB_MODERATE),
+  validate(jobIdParamSchema, 'params'),
+  validate(moderateJobSchema),
+  jobPresenter.moderateJob,
 );

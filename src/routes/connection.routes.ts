@@ -1,12 +1,9 @@
 import { Router } from 'express';
 
-import { PERMISSIONS } from '../constants/permissions.js';
-import { connectionController } from '../controllers/connection.controller.js';
+import { connectionPresenter } from '../presenters/connection.presenter.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
-import { requirePermission } from '../middlewares/permission.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
-  connectionIdParamSchema,
   createConnectionSchema,
   respondConnectionSchema,
 } from '../validators/connection.schema.js';
@@ -14,17 +11,7 @@ import {
 export const connectionRouter = Router();
 
 connectionRouter.use(authenticate);
-connectionRouter.get('/', connectionController.listMine);
-connectionRouter.post(
-  '/',
-  requirePermission(PERMISSIONS.CONNECTION_CREATE),
-  validate(createConnectionSchema),
-  connectionController.create,
-);
-connectionRouter.patch(
-  '/:id/respond',
-  requirePermission(PERMISSIONS.CONNECTION_RESPOND),
-  validate(connectionIdParamSchema, 'params'),
-  validate(respondConnectionSchema),
-  connectionController.respond,
-);
+
+connectionRouter.get('/', connectionPresenter.listMyConnections);
+connectionRouter.post('/', validate(createConnectionSchema), connectionPresenter.sendRequest);
+connectionRouter.patch('/:id', validate(respondConnectionSchema), connectionPresenter.respond);

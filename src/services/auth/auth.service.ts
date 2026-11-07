@@ -1,146 +1,282 @@
-import type { RoleName } from '../../generated/prisma/client.js';
-import { env } from '../../config/index.js';
+import { randomUUID } from 'node:crypto';
+import { Role, UserStatus, VerificationStatus } from '@prisma/client';
+
+import { prisma } from '../../config/database.js';
 import { ApiError } from '../../errors/api-error.js';
-import { tokenRepository } from '../../repositories/token.repository.js';
-import { universityRepository } from '../../repositories/university.repository.js';
-import {
-  userRepository,
-  type AuthenticatedUserRecord,
-} from '../../repositories/user.repository.js';
+import { userModel } from '../../models/user.model.js';
+import { sessionModel } from '../../models/session.model.js';
+import { auditLogModel } from '../../models/audit-log.model.js';
 import { passwordService } from './password.service.js';
 import { tokenService } from './token.service.js';
 
-interface RegisterInput {
+export interface RegisterInput {
   name: string;
   email: string;
   password: string;
-  universitySlug: string;
-  role: Extract<RoleName, 'STUDENT' | 'ALUMNI'>;
+  role: Role;
+  universityId?: string; // Institutional ID (e.g. STU-2026-001)
+  department: string;
   batch?: string;
-  department?: string;
-  studentId?: string;
-  currentSemester?: string;
-  admissionYear?: string;
-  expectedGraduationYear?: string;
-  graduationYear?: string;
-  academicId?: string;
-  employmentStatus?: string;
-  currentCompany?: string;
-  position?: string;
-  skills?: string[];
-  interests?: string[];
-}
-
-function toSafeUser(user: AuthenticatedUserRecord) {
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role.name,
-    verified: user.verified,
-    verificationStatus: user.verificationStatus,
-    rejectionReason: user.rejectionReason,
-    avatarUrl: user.avatarUrl,
-    department: user.department,
-    batch: user.batch,
-    university: {
-      id: user.university.id,
-      name: user.university.name,
-      slug: user.university.slug,
-      domain: user.university.domain,
-    },
-  };
-}
-
-export async function issueSession(user: AuthenticatedUserRecord) {
-  const subject = { userId: user.id, universityId: user.universityId, role: user.role.name };
-  const refresh = tokenService.createRefreshToken(subject);
-  const accessToken = tokenService.createAccessToken(subject);
-
-  await tokenRepository.create({
-    id: refresh.id,
-    tokenHash: tokenService.hash(refresh.token),
-    userId: user.id,
-    universityId: user.universityId,
-    expiresAt: refresh.expiresAt,
-  });
-
-  return {
-    accessToken,
-    refreshToken: refresh.token,
-    refreshExpiresAt: refresh.expiresAt,
-    user: toSafeUser(user),
-  };
+  graduationYear?: number;
 }
 
 export const authService = {
   async register(input: RegisterInput) {
-    const [university, existingUser] = await Promise.all([
-      universityRepository.findBySlug(input.universitySlug),
-      userRepository.findAuthenticatedByEmail(input.email),
-    ]);
+    const email = input.email.trim().toLowerCase();
 
-    if (!university || !university.isActive) throw ApiError.notFound('Active university');
-    if (existingUser) throw ApiError.conflict('An account with this email already exists.');
+    const existingUser = await userModel.findByEmail(email);
+    if (existingUser) {
+      throw ApiError.conflict('An account with this email address already exists.', 'DUPLICATE');
+    }
 
     const passwordHash = await passwordService.hash(input.password);
-    const user = await userRepository.create({
-      ...input,
-      universityId: university.id,
-      passwordHash,
+
+    // Initial status: Students & Alumni require verification; Super Admin and Moderator created via admin
+    const status = UserStatus.PENDING_SETUP;
+    const verificationStatus =
+      input.role === Role.STUDENT || input.role === Role.ALUMNI
+        ? VerificationStatus.PENDING
+        : VerificationStatus.NOT_REQUIRED;
+
+    const parsedBatch = input.batch ? parseInt(input.batch, 10) : undefined;
+
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          role: input.role,
+          status,
+          verificationStatus,
+          universityId: input.universityId,
+        },
+      });
+
+      await tx.profile.create({
+        data: {
+          userId: createdUser.id,
+          fullName: input.name.trim(),
+          department: input.department.trim(),
+          graduationYear: input.graduationYear,
+          batch: Number.isNaN(parsedBatch) ? undefined : parsedBatch,
+        },
+      });
+
+      await tx.privacySetting.create({
+        data: {
+          userId: createdUser.id,
+        },
+      });
+
+      return createdUser;
     });
 
-    return issueSession(user);
-  },
+    await auditLogModel.record({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'USER_REGISTER',
+      targetType: 'User',
+      targetId: user.id,
+      metadata: { reason: 'Self-registration through registration portal' },
+    });
 
-  async login(email: string, password: string) {
-    const user = await userRepository.findAuthenticatedByEmail(email);
-    if (!user || !user.isActive || !user.university.isActive) {
-      throw ApiError.unauthorized('Email or password is incorrect.');
-    }
-
-    if (env.NODE_ENV === 'production' && user.isDemo) {
-      throw ApiError.unauthorized('Demo accounts are deactivated in production.');
-    }
-
-    const passwordMatches = await passwordService.verify(user.passwordHash, password);
-    if (!passwordMatches) throw ApiError.unauthorized('Email or password is incorrect.');
-
-    return issueSession(user);
-  },
-
-  async refresh(refreshToken: string | undefined) {
-    if (!refreshToken) throw ApiError.unauthorized('A refresh token is required.');
-    const payload = tokenService.verifyRefreshToken(refreshToken);
-    const storedToken = await tokenRepository.findActiveById(payload.jti as string);
-
-    if (!storedToken || storedToken.tokenHash !== tokenService.hash(refreshToken)) {
-      throw ApiError.unauthorized('This session has expired or was revoked.');
-    }
-
-    const user = await userRepository.findAuthenticatedById(payload.sub);
-    if (!user || !user.isActive || !user.university.isActive) {
-      throw ApiError.unauthorized('This account is unavailable.');
-    }
-
-    await tokenRepository.revoke(storedToken.id);
-    return issueSession(user);
-  },
-
-  async logout(refreshToken: string | undefined) {
-    if (!refreshToken) return;
-
-    try {
-      const payload = tokenService.verifyRefreshToken(refreshToken);
-      await tokenRepository.revoke(payload.jti as string);
-    } catch {
-      // Logout remains idempotent; an expired cookie should still be cleared client-side.
-    }
-  },
-
-  async me(userId: string) {
-    const user = await userRepository.findFullProfileById(userId);
-    if (!user) throw ApiError.unauthorized('This account is unavailable.');
     return user;
+  },
+
+  async login(
+    input: { email: string; password: string },
+    metadata: { userAgent?: string; ipAddress?: string } = {},
+  ) {
+    const email = input.email.trim().toLowerCase();
+    const user = await userModel.findByEmail(email);
+
+    if (!user) {
+      throw ApiError.unauthorized('Invalid email or password.');
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw ApiError.accountSuspended();
+    }
+
+    const emailHash = tokenService.hashToken(email);
+
+    const isPasswordValid = await passwordService.verify(user.passwordHash, input.password);
+    if (!isPasswordValid) {
+      await prisma.loginHistory.create({
+        data: {
+          userId: user.id,
+          emailHash,
+          ip: metadata.ipAddress,
+          userAgent: metadata.userAgent,
+          success: false,
+          failureReason: 'INVALID_CREDENTIALS',
+        },
+      });
+      throw ApiError.unauthorized('Invalid email or password.');
+    }
+
+    // Generate Session Family
+    const sessionId = randomUUID();
+    const familyId = randomUUID();
+
+    const refreshTokenData = tokenService.createRefreshToken({
+      userId: user.id,
+      role: user.role,
+      sessionId,
+      familyId,
+    });
+
+    const accessTokenData = tokenService.createAccessToken({
+      userId: user.id,
+      role: user.role,
+      sessionId,
+      familyId,
+    });
+
+    await sessionModel.create({
+      userId: user.id,
+      refreshTokenHash: refreshTokenData.tokenHash,
+      familyId,
+      expiresAt: refreshTokenData.expiresAt,
+      userAgent: metadata.userAgent,
+      ip: metadata.ipAddress,
+    });
+
+    await prisma.loginHistory.create({
+      data: {
+        userId: user.id,
+        emailHash,
+        ip: metadata.ipAddress,
+        userAgent: metadata.userAgent,
+        success: true,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.profile?.fullName ?? user.email,
+        role: user.role,
+        status: user.status,
+        verificationStatus: user.verificationStatus,
+        department: user.profile?.department,
+        profile: user.profile,
+      },
+      accessToken: accessTokenData.token,
+      refreshToken: refreshTokenData.token,
+    };
+  },
+
+  async refresh(refreshToken: string) {
+    const decoded = tokenService.verifyRefreshToken(refreshToken);
+    const tokenHash = tokenService.hashToken(refreshToken);
+
+    const session = await sessionModel.findByTokenHash(tokenHash);
+
+    if (!session) {
+      throw ApiError.unauthorized('Session not found.');
+    }
+
+    // Replay detection: If token was already revoked, someone is replaying a stolen token!
+    if (session.revokedAt) {
+      await sessionModel.revokeFamily(session.familyId, 'REPLAY_ATTACK_DETECTED');
+      throw ApiError.unauthorized('Compromised session detected. All sessions in this chain have been revoked.');
+    }
+
+    const user = session.user;
+    if (user.status === UserStatus.SUSPENDED) {
+      throw ApiError.accountSuspended();
+    }
+
+    // Rotate tokens
+    const nextSessionId = randomUUID();
+    const newRefreshTokenData = tokenService.createRefreshToken({
+      userId: user.id,
+      role: user.role,
+      sessionId: nextSessionId,
+      familyId: session.familyId,
+    });
+
+    const newAccessTokenData = tokenService.createAccessToken({
+      userId: user.id,
+      role: user.role,
+      sessionId: nextSessionId,
+      familyId: session.familyId,
+    });
+
+    await prisma.$transaction([
+      prisma.session.update({
+        where: { id: session.id },
+        data: {
+          revokedAt: new Date(),
+          revokedReason: 'ROTATED',
+        },
+      }),
+      prisma.session.create({
+        data: {
+          id: nextSessionId,
+          userId: user.id,
+          refreshTokenHash: newRefreshTokenData.tokenHash,
+          familyId: session.familyId,
+          rotatedFromId: session.id,
+          expiresAt: newRefreshTokenData.expiresAt,
+          userAgent: session.userAgent,
+          ip: session.ip,
+          reauthUntil: session.reauthUntil,
+        },
+      }),
+    ]);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.profile?.fullName ?? user.email,
+        role: user.role,
+        status: user.status,
+        verificationStatus: user.verificationStatus,
+        department: user.profile?.department,
+        profile: user.profile,
+      },
+      accessToken: newAccessTokenData.token,
+      refreshToken: newRefreshTokenData.token,
+    };
+  },
+
+  async logout(sessionId?: string) {
+    if (sessionId) {
+      await sessionModel.revoke(sessionId).catch(() => {});
+    }
+  },
+
+  async reauth(userId: string, sessionId: string, password: string) {
+    const user = await userModel.findById(userId);
+    if (!user) throw ApiError.unauthorized();
+
+    const isPasswordValid = await passwordService.verify(user.passwordHash, password);
+    if (!isPasswordValid) {
+      throw ApiError.forbidden('Invalid password for administrative re-authentication.');
+    }
+
+    // 15-minute re-authentication window as specified in SSOT
+    const reauthUntil = new Date(Date.now() + 15 * 60 * 1000);
+    await sessionModel.updateReauth(sessionId, reauthUntil);
+
+    await auditLogModel.record({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'ADMIN_REAUTH_SUCCESS',
+      targetType: 'Session',
+      targetId: sessionId,
+      metadata: { reason: '15-minute administrative window activated' },
+    });
+
+    return { reauthUntil };
   },
 };

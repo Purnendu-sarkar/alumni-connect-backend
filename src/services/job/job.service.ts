@@ -1,104 +1,179 @@
+import {
+  EmploymentType,
+  JobModerationAction,
+  JobStatus,
+  ModerationReasonCode,
+  Role,
+  WorkMode,
+} from '@prisma/client';
+
+import { prisma } from '../../config/database.js';
+import { bumpVersion } from '../../config/redis.js';
 import { ApiError } from '../../errors/api-error.js';
-import { auditLogRepository } from '../../repositories/audit-log.repository.js';
-import { jobRepository } from '../../repositories/job.repository.js';
-import type { PaginationInput } from '../../utils/pagination.js';
+import { jobModel } from '../../models/job.model.js';
+import { auditLogModel } from '../../models/audit-log.model.js';
 
 export const jobService = {
-  listPublished(universityId: string, pagination: PaginationInput) {
-    return jobRepository.listPublished(universityId, pagination);
+  async listActive(options: {
+    employmentType?: EmploymentType;
+    workMode?: WorkMode;
+    search?: string;
+    skip?: number;
+    take?: number;
+  }) {
+    return jobModel.list({
+      ...options,
+      status: JobStatus.PUBLISHED,
+    });
   },
 
-  async create(input: {
-    universityId: string;
-    postedById: string;
-    title: string;
-    description: string;
-    company: string;
-    location?: string;
-    employmentType?: string;
-    applicationUrl?: string;
-    applicationEmail?: string;
-    expiresAt?: Date;
-  }) {
-    const job = await jobRepository.create(input);
-    await auditLogRepository.record({
-      universityId: input.universityId,
-      actorId: input.postedById,
-      action: 'job.created',
-      targetType: 'job',
-      targetId: job.id,
-    });
+  async findById(id: string) {
+    const job = await jobModel.findById(id);
+    if (!job) throw ApiError.notFound('Job listing');
     return job;
   },
 
-  async review(input: {
-    jobId: string;
-    universityId: string;
-    reviewerId: string;
-    status: 'APPROVED' | 'REJECTED';
-    rejectionReason?: string;
+  async create(input: {
+    creatorId: string;
+    creatorRole: Role;
+    title: string;
+    company: string;
+    description: string;
+    category?: string;
+    location?: string;
+    employmentType: EmploymentType;
+    workMode?: WorkMode;
+    requirements?: string;
+    salaryMin?: number;
+    salaryMax?: number;
+    salaryCurrency?: string;
+    deadline?: Date;
   }) {
-    const job = await jobRepository.findById(input.jobId);
-    if (!job || job.universityId !== input.universityId) throw ApiError.notFound('Job');
-    if (job.status !== 'PENDING') throw ApiError.conflict('Only pending jobs can be reviewed.');
+    // Only ALUMNI can post jobs; SUPER_ADMIN manages/overrides
+    if (input.creatorRole !== Role.ALUMNI && input.creatorRole !== Role.SUPER_ADMIN) {
+      throw ApiError.forbidden('Only alumni members and administrators can publish job opportunities.');
+    }
 
-    const reviewed = await jobRepository.review(input);
-    await auditLogRepository.record({
-      universityId: input.universityId,
-      actorId: input.reviewerId,
-      action: `job.${input.status.toLowerCase()}`,
-      targetType: 'job',
-      targetId: reviewed.id,
-      metadata: input.rejectionReason ? { rejectionReason: input.rejectionReason } : undefined,
+    // Default status: SUBMITTED for review unless created directly by SUPER_ADMIN
+    const initialStatus =
+      input.creatorRole === Role.SUPER_ADMIN ? JobStatus.PUBLISHED : JobStatus.SUBMITTED;
+
+    const job = await jobModel.create({
+      title: input.title,
+      company: input.company,
+      description: input.description,
+      category: input.category ?? 'General',
+      location: input.location,
+      employmentType: input.employmentType,
+      workMode: input.workMode ?? WorkMode.ON_SITE,
+      requirements: input.requirements,
+      salaryMin: input.salaryMin,
+      salaryMax: input.salaryMax,
+      salaryCurrency: input.salaryCurrency ?? 'BDT',
+      deadline: input.deadline,
+      status: initialStatus,
+      submittedAt: new Date(),
+      publishedAt: initialStatus === JobStatus.PUBLISHED ? new Date() : undefined,
+      owner: { connect: { id: input.creatorId } },
     });
-    return reviewed;
+
+    if (initialStatus === JobStatus.PUBLISHED) {
+      await bumpVersion('jobs');
+    }
+
+    await auditLogModel.record({
+      actorId: input.creatorId,
+      actorRole: input.creatorRole,
+      action: 'JOB_CREATE',
+      targetType: 'Job',
+      targetId: job.id,
+      metadata: { initialStatus },
+    });
+
+    return job;
+  },
+
+  async moderate(input: {
+    jobId: string;
+    moderatorId: string;
+    moderatorRole: Role;
+    action: 'APPROVE' | 'REJECT';
+    reasonCode?: ModerationReasonCode;
+    note?: string;
+  }) {
+    const job = await jobModel.findById(input.jobId);
+    if (!job) throw ApiError.notFound('Job listing');
+
+    const nextStatus = input.action === 'APPROVE' ? JobStatus.PUBLISHED : JobStatus.REJECTED;
+    const modAction =
+      input.action === 'APPROVE' ? JobModerationAction.APPROVED : JobModerationAction.REJECTED;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedJob = await tx.job.update({
+        where: { id: input.jobId },
+        data: {
+          status: nextStatus,
+          publishedAt: nextStatus === JobStatus.PUBLISHED ? new Date() : undefined,
+          reviewerId: input.moderatorId,
+          version: { increment: 1 },
+        },
+      });
+
+      await tx.jobModerationRecord.create({
+        data: {
+          jobId: input.jobId,
+          actorId: input.moderatorId,
+          actorRole: input.moderatorRole,
+          action: modAction,
+          reasonCode: input.reasonCode,
+          ownerVisibleNote: input.note,
+        },
+      });
+
+      return updatedJob;
+    });
+
+    await bumpVersion('jobs');
+
+    await auditLogModel.record({
+      actorId: input.moderatorId,
+      actorRole: input.moderatorRole,
+      action: `JOB_MODERATE_${input.action}`,
+      targetType: 'Job',
+      targetId: updated.id,
+      metadata: { note: input.note },
+    });
+
+    return updated;
   },
 
   async apply(input: {
     jobId: string;
-    universityId: string;
     applicantId: string;
-    message?: string;
+    applicantRole: Role;
+    coverLetter?: string;
+    resumeUrl?: string;
   }) {
-    const job = await jobRepository.findById(input.jobId);
-    if (!job || job.universityId !== input.universityId || job.status !== 'APPROVED') {
-      throw ApiError.notFound('Open job');
+    const job = await jobModel.findById(input.jobId);
+    if (!job || job.status !== JobStatus.PUBLISHED) {
+      throw ApiError.badRequest('This job listing is not accepting applications.');
     }
-    if (job.expiresAt && job.expiresAt <= new Date())
-      throw ApiError.conflict('This job has expired.');
 
-    try {
-      const application = await jobRepository.apply(input.jobId, input.applicantId, input.message);
-      await auditLogRepository.record({
-        universityId: input.universityId,
-        actorId: input.applicantId,
-        action: 'job.applied',
-        targetType: 'job',
-        targetId: input.jobId,
-      });
-      return application;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('Unique constraint')) {
-        throw ApiError.conflict('You have already applied for this job.');
-      }
-      throw error;
+    const alreadyApplied = await jobModel.hasUserApplied(input.jobId, input.applicantId);
+    if (alreadyApplied) {
+      throw ApiError.conflict('You have already applied for this job listing.');
     }
-  },
 
-  listPending(universityId: string, pagination: PaginationInput) {
-    return jobRepository.listPending(universityId, pagination);
-  },
+    const application = await jobModel.apply(input);
 
-  async listMine(userId: string, role: string) {
-    if (role === 'STUDENT') {
-      const applications = await jobRepository.listMyApplications(userId);
-      return { applications, postings: [] };
-    }
-    const postings = await jobRepository.listMyPosted(userId);
-    return { postings, applications: [] };
-  },
+    await auditLogModel.record({
+      actorId: input.applicantId,
+      actorRole: input.applicantRole,
+      action: 'JOB_APPLY',
+      targetType: 'JobApplication',
+      targetId: application.id,
+    });
 
-  getById(id: string) {
-    return jobRepository.findById(id);
+    return application;
   },
 };

@@ -1,20 +1,24 @@
-import type { RoleName } from '../generated/prisma/client.js';
+import type { Role, UserStatus, VerificationStatus } from '@prisma/client';
 
 declare global {
   namespace Express {
     interface Request {
       requestId: string;
-      auth?: {
-        userId: string;
-        universityId: string;
-        role: RoleName;
-        permissions: string[];
-        isDemo?: boolean;
-      };
-      tenant?: {
+      user?: {
         id: string;
-        slug: string;
-        domain: string;
+        email: string;
+        name: string;
+        role: Role;
+        status: UserStatus;
+        verificationStatus: VerificationStatus;
+        sessionId?: string;
+        familyId?: string;
+        permissions?: string[];
+      };
+      session?: {
+        id: string;
+        familyId: string;
+        reauthUntil?: Date | null;
       };
     }
   }
