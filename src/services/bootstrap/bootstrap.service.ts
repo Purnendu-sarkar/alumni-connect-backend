@@ -134,49 +134,47 @@ export class BootstrapService {
   async ensureRolesAndPermissions(): Promise<void> {
     const permissionKeys = Object.values(PERMISSIONS);
 
-    // 1. Upsert all canonical permissions
-    const permissions = await Promise.all(
-      permissionKeys.map((key) =>
-        prisma.permission.upsert({
-          where: { key },
-          update: {},
-          create: { key, description: `Permission to ${key}` },
-        }),
-      ),
-    );
+    // 1. Upsert all canonical permissions sequentially to avoid connection pool exhaustion
+    const permissions = [];
+    for (const key of permissionKeys) {
+      const permission = await prisma.permission.upsert({
+        where: { key },
+        update: {},
+        create: { key, description: `Permission to ${key}` },
+      });
+      permissions.push(permission);
+    }
 
     const permissionIdByKey = new Map(
       permissions.map((permission) => [permission.key, permission.id]),
     );
 
-    // 2. Upsert all canonical roles and associate permissions
-    await Promise.all(
-      Object.values(RoleName).map(async (name) => {
-        const mappedKeys = rolePermissionMap[name] ?? [];
-        const permissionConnects = mappedKeys
-          .map((key) => {
-            const id = permissionIdByKey.get(key);
-            return id ? { id } : null;
-          })
-          .filter(Boolean) as { id: string }[];
+    // 2. Upsert all canonical roles and associate permissions sequentially
+    for (const name of Object.values(RoleName)) {
+      const mappedKeys = rolePermissionMap[name] ?? [];
+      const permissionConnects = mappedKeys
+        .map((key) => {
+          const id = permissionIdByKey.get(key);
+          return id ? { id } : null;
+        })
+        .filter(Boolean) as { id: string }[];
 
-        return prisma.role.upsert({
-          where: { name },
-          update: {
-            permissions: {
-              connect: permissionConnects,
-            },
+      await prisma.role.upsert({
+        where: { name },
+        update: {
+          permissions: {
+            connect: permissionConnects,
           },
-          create: {
-            name,
-            description: `Default system role for ${name}`,
-            permissions: {
-              connect: permissionConnects,
-            },
+        },
+        create: {
+          name,
+          description: `Default system role for ${name}`,
+          permissions: {
+            connect: permissionConnects,
           },
-        });
-      }),
-    );
+        },
+      });
+    }
   }
 }
 
