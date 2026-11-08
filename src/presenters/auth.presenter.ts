@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { authService } from '../services/auth/auth.service.js';
+import { passwordResetService } from '../services/auth/password-reset.service.js';
 import { tokenService } from '../services/auth/token.service.js';
 import { sendSuccess } from '../utils/api-response.js';
 import { ApiError } from '../errors/api-error.js';
@@ -11,7 +12,8 @@ export const authPresenter = {
 
     return sendSuccess(res, {
       statusCode: 201,
-      message: 'Account registered successfully. Please verify your institutional identity.',
+      message:
+        'Account registered successfully. A verification link has been dispatched to your institutional email.',
       data: {
         id: user.id,
         email: user.email,
@@ -19,6 +21,57 @@ export const authPresenter = {
         status: user.status,
         verificationStatus: user.verificationStatus,
       },
+    });
+  },
+
+  async verifyEmail(req: Request, res: Response) {
+    const { token } = req.body;
+    const result = await authService.verifyEmail(token);
+    return sendSuccess(res, {
+      message: result.message,
+      data: result,
+    });
+  },
+
+  async resendVerification(req: Request, res: Response) {
+    const { email } = req.body;
+    const result = await authService.resendVerificationEmail(email);
+    return sendSuccess(res, {
+      message: result.message,
+    });
+  },
+
+  async validateSetupToken(req: Request, res: Response) {
+    const token = (req.query.token as string) || req.body?.token;
+    const result = await authService.validateSetupToken(token);
+    return sendSuccess(res, {
+      message: 'Setup token is valid.',
+      data: result,
+    });
+  },
+
+  async setupAccount(req: Request, res: Response) {
+    const { token, password } = req.body;
+    const result = await authService.setupAccount({ token, password });
+    return sendSuccess(res, {
+      message: result.message,
+    });
+  },
+
+  async forgotPassword(req: Request, res: Response) {
+    const { email } = req.body;
+    const result = await passwordResetService.requestPasswordReset(email);
+    return sendSuccess(res, {
+      message: result.message,
+      data: result,
+    });
+  },
+
+  async resetPassword(req: Request, res: Response) {
+    const { token, password } = req.body;
+    const result = await passwordResetService.resetPassword(token, password);
+    return sendSuccess(res, {
+      message: result.message,
     });
   },
 

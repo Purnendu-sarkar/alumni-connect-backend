@@ -7,7 +7,7 @@ export const userModel = {
       where: { id },
       include: {
         profile: true,
-        privacySetting: true,
+        privacy: true,
       },
     });
   },
@@ -17,7 +17,16 @@ export const userModel = {
       where: { email: email.toLowerCase() },
       include: {
         profile: true,
-        privacySetting: true,
+        privacy: true,
+      },
+    });
+  },
+
+  findByUniversityId(universityId: string) {
+    return prisma.user.findUnique({
+      where: { universityId: universityId.trim() },
+      include: {
+        profile: true,
       },
     });
   },
@@ -27,7 +36,7 @@ export const userModel = {
       data,
       include: {
         profile: true,
-        privacySetting: true,
+        privacy: true,
       },
     });
   },
@@ -38,7 +47,7 @@ export const userModel = {
       data,
       include: {
         profile: true,
-        privacySetting: true,
+        privacy: true,
       },
     });
   },
@@ -78,7 +87,7 @@ export const userModel = {
         orderBy: { createdAt: 'desc' },
         include: {
           profile: true,
-          privacySetting: true,
+          privacy: true,
         },
       }),
       prisma.user.count({ where }),

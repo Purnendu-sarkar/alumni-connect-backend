@@ -27,22 +27,33 @@ const environmentSchema = z.object({
   ADMIN_REAUTH_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
 
   // Bootstrap Super Admin Configuration (server-only)
+  INITIAL_SUPER_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_SUPER_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_SUPER_ADMIN_PASSWORD: z.string().min(12).optional(),
   BOOTSTRAP_SUPER_ADMIN_NAME: z.string().default('Platform Super Admin'),
+  INITIAL_SUPER_ADMIN_SETUP_TOKEN_EXPIRY: z.string().default('48h'),
 
   // Institutional Single-University Configuration
   INSTITUTION_NAME: z.string().default('North Western University'),
   INSTITUTION_DOMAIN: z.string().default('nwu.ac.bd'),
 
-  // SMTP Email Configuration
-  SMTP_HOST: z.string().default('localhost'),
-  SMTP_PORT: z.coerce.number().int().default(1025),
+  // Application Service URLs
+  BACKEND_URL: z.string().default('http://localhost:5000'),
+  FRONTEND_URL: z.string().default(process.env.APP_FRONTEND_URL || 'http://localhost:3000'),
+  APP_FRONTEND_URL: z.string().default(process.env.FRONTEND_URL || 'http://localhost:3000'),
+
+  // SMTP Email Configuration (Google Gmail SMTP & Local Fallback)
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().int().default(587),
   SMTP_SECURE: booleanFromEnv.default(false),
+  SMTP_REQUIRE_TLS: booleanFromEnv.default(true),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default('AlumniConnect <noreply@nwu.ac.bd>'),
-  APP_FRONTEND_URL: z.string().default('http://localhost:3000'),
+  EMAIL_ENABLED: booleanFromEnv.default(true),
+  EMAIL_CONNECTION_TIMEOUT: z.coerce.number().int().positive().default(10000),
+  EMAIL_GREETING_TIMEOUT: z.coerce.number().int().positive().default(10000),
+  EMAIL_SOCKET_TIMEOUT: z.coerce.number().int().positive().default(20000),
 });
 
 const parsedEnvironment = environmentSchema.safeParse(process.env);
@@ -59,3 +70,10 @@ export const corsOrigins = env.CORS_ORIGINS.split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 export const shouldUseSecureCookies = env.COOKIE_SECURE ?? env.NODE_ENV === 'production';
+
+// Helper for setup token expiration in hours
+export const setupTokenExpiryHours = (() => {
+  const raw = env.INITIAL_SUPER_ADMIN_SETUP_TOKEN_EXPIRY;
+  const num = parseInt(raw.replace(/\D/g, ''), 10);
+  return Number.isNaN(num) || num <= 0 ? 48 : num;
+})();

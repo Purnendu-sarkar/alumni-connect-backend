@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-const optionalTrimmedText = z.string().trim().min(1).max(100).optional();
 const passwordSchema = z
   .string()
   .min(12, 'Password must be at least 12 characters.')
@@ -17,13 +16,26 @@ export const registerSchema = z.object({
   role: z.enum(['STUDENT', 'ALUMNI']),
   department: z.string().trim().min(1, 'Department is required.').max(100),
   batch: z.string().trim().min(1, 'Batch / class year is required.').max(100).optional(),
-  universityId: optionalTrimmedText, // Institutional Student/Staff ID (e.g. STU-2026-001)
+  universityId: z.string().trim().min(2, 'University ID is required.').max(40), // Institutional ID (e.g. STU-2026-001)
   graduationYear: z.coerce.number().int().min(1950).max(2100).optional(),
 });
 
 export const loginSchema = z.object({
   email: z.string().email('Enter a valid email address.').trim().toLowerCase(),
   password: z.string().min(1, 'Enter your password.').max(128),
+});
+
+export const setupAccountSchema = z.object({
+  token: z.string().min(1, 'Account setup token is required.'),
+  password: passwordSchema,
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, 'Email verification token is required.'),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email('Enter a valid institutional email address.').trim().toLowerCase(),
 });
 
 export const reauthSchema = z.object({

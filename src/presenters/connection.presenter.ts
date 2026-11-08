@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { ConnectionStatus } from '@prisma/client';
+import type { ConnectionStatus } from '@prisma/client';
 
 import { connectionService } from '../services/connection/connection.service.js';
 import { sendSuccess } from '../utils/api-response.js';

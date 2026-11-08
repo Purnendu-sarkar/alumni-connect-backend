@@ -1,11 +1,12 @@
-import { randomUUID } from 'node:crypto';
-import { Role, UserStatus, VerificationStatus } from '@prisma/client';
+import crypto, { randomUUID } from 'node:crypto';
+import { Role, TokenType, UserStatus, VerificationStatus } from '@prisma/client';
 
 import { prisma } from '../../config/database.js';
 import { ApiError } from '../../errors/api-error.js';
 import { userModel } from '../../models/user.model.js';
 import { sessionModel } from '../../models/session.model.js';
 import { auditLogModel } from '../../models/audit-log.model.js';
+import { emailService } from '../email/email.service.js';
 import { passwordService } from './password.service.js';
 import { tokenService } from './token.service.js';
 
@@ -24,21 +25,39 @@ export const authService = {
   async register(input: RegisterInput) {
     const email = input.email.trim().toLowerCase();
 
+    // 1. Check duplicate email
     const existingUser = await userModel.findByEmail(email);
     if (existingUser) {
-      throw ApiError.conflict('An account with this email address already exists.', 'DUPLICATE');
+      throw ApiError.conflict('An account with this email address already exists.', 'DUPLICATE_EMAIL');
+    }
+
+    // 2. Check duplicate institutional University ID
+    if (input.universityId) {
+      const existingId = await userModel.findByUniversityId(input.universityId);
+      if (existingId) {
+        throw ApiError.conflict(
+          'An account with this University ID already exists.',
+          'DUPLICATE_UNIVERSITY_ID',
+        );
+      }
     }
 
     const passwordHash = await passwordService.hash(input.password);
 
-    // Initial status: Students & Alumni require verification; Super Admin and Moderator created via admin
-    const status = UserStatus.PENDING_SETUP;
+    // Initial lifecycle status:
+    // Both Student and Alumni enter PENDING_EMAIL_VERIFICATION.
+    // Student requires no further admin verification after email check.
+    // Alumni requires admin verification after email check.
+    const status = UserStatus.PENDING_EMAIL_VERIFICATION;
     const verificationStatus =
-      input.role === Role.STUDENT || input.role === Role.ALUMNI
-        ? VerificationStatus.PENDING
-        : VerificationStatus.NOT_REQUIRED;
+      input.role === Role.ALUMNI ? VerificationStatus.PENDING : VerificationStatus.NOT_REQUIRED;
 
     const parsedBatch = input.batch ? parseInt(input.batch, 10) : undefined;
+
+    // Generate single-use email verification token
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
@@ -48,7 +67,7 @@ export const authService = {
           role: input.role,
           status,
           verificationStatus,
-          universityId: input.universityId,
+          universityId: input.universityId?.trim(),
         },
       });
 
@@ -68,8 +87,20 @@ export const authService = {
         },
       });
 
+      await tx.verificationToken.create({
+        data: {
+          userId: createdUser.id,
+          tokenHash,
+          type: TokenType.EMAIL_VERIFICATION,
+          expiresAt,
+        },
+      });
+
       return createdUser;
     });
+
+    // Dispatch verification email (captured in memory as fallback if local SMTP is offline)
+    await emailService.sendVerificationEmail(user.email, input.name.trim(), plainToken);
 
     await auditLogModel.record({
       actorId: user.id,
@@ -80,7 +111,227 @@ export const authService = {
       metadata: { reason: 'Self-registration through registration portal' },
     });
 
-    return user;
+    return {
+      ...user,
+      verificationEmailSent: true,
+    };
+  },
+
+  async verifyEmail(plainToken: string) {
+    if (!plainToken || typeof plainToken !== 'string') {
+      throw ApiError.badRequest('A valid email verification token is required.');
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(plainToken.trim()).digest('hex');
+
+    const tokenRecord = await prisma.verificationToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!tokenRecord || tokenRecord.type !== TokenType.EMAIL_VERIFICATION) {
+      throw ApiError.badRequest('Invalid or unrecognized email verification token.');
+    }
+
+    if (tokenRecord.usedAt !== null) {
+      throw ApiError.badRequest('This verification link has already been used.');
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      throw ApiError.badRequest('This verification link has expired. Please request a new one.');
+    }
+
+    // Role-specific lifecycle transition:
+    // STUDENT -> ACTIVE (ready to access student dashboard immediately)
+    // ALUMNI -> PENDING_ADMIN_VERIFICATION (requires administrator approval before dashboard access)
+    let nextStatus: UserStatus = UserStatus.ACTIVE;
+    let nextVerification: VerificationStatus = VerificationStatus.NOT_REQUIRED;
+    let message = 'Your email address has been verified successfully. You can now sign in.';
+
+    if (tokenRecord.user.role === Role.ALUMNI) {
+      nextStatus = UserStatus.PENDING_ADMIN_VERIFICATION;
+      nextVerification = VerificationStatus.PENDING;
+      message =
+        'Email verified successfully! Your alumni account has been queued for administrative verification. You will receive an email once approved.';
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: tokenRecord.user.id },
+        data: {
+          emailVerifiedAt: new Date(),
+          status: nextStatus,
+          verificationStatus: nextVerification,
+        },
+      });
+
+      await tx.verificationToken.update({
+        where: { id: tokenRecord.id },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    await auditLogModel.record({
+      actorId: tokenRecord.user.id,
+      actorRole: tokenRecord.user.role,
+      action: 'EMAIL_VERIFIED',
+      targetType: 'User',
+      targetId: tokenRecord.user.id,
+      metadata: { newStatus: nextStatus },
+    });
+
+    return {
+      success: true,
+      message,
+      role: tokenRecord.user.role,
+      status: nextStatus,
+    };
+  },
+
+  async resendVerificationEmail(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { profile: true },
+    });
+
+    if (!user || user.status !== UserStatus.PENDING_EMAIL_VERIFICATION) {
+      return {
+        success: true,
+        message: 'If an unverified account exists with that email address, a verification link has been resent.',
+      };
+    }
+
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await prisma.verificationToken.deleteMany({
+      where: { userId: user.id, type: TokenType.EMAIL_VERIFICATION },
+    });
+
+    await prisma.verificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        type: TokenType.EMAIL_VERIFICATION,
+        expiresAt,
+      },
+    });
+
+    await emailService.sendVerificationEmail(
+      user.email,
+      user.profile?.fullName ?? user.email,
+      plainToken,
+    );
+
+    return {
+      success: true,
+      message: 'If an unverified account exists with that email address, a verification link has been resent.',
+    };
+  },
+
+  async validateSetupToken(plainToken: string) {
+    if (!plainToken || typeof plainToken !== 'string') {
+      throw ApiError.badRequest('A valid account setup token is required.');
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(plainToken.trim()).digest('hex');
+
+    const tokenRecord = await prisma.verificationToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          include: { profile: true },
+        },
+      },
+    });
+
+    if (!tokenRecord || tokenRecord.type !== TokenType.ACCOUNT_SETUP) {
+      throw ApiError.badRequest('Invalid or unrecognized account setup link.');
+    }
+
+    if (tokenRecord.usedAt !== null) {
+      throw ApiError.badRequest('This account setup link has already been used. Please log in.');
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      throw ApiError.badRequest(
+        'This account setup link has expired. Please contact an administrator.',
+      );
+    }
+
+    return {
+      valid: true,
+      email: tokenRecord.user.email,
+      name: tokenRecord.user.profile?.fullName,
+      role: tokenRecord.user.role,
+    };
+  },
+
+  async setupAccount(input: { token: string; password: string }) {
+    const { token: plainToken, password } = input;
+    if (!plainToken || typeof plainToken !== 'string') {
+      throw ApiError.badRequest('A valid account setup token is required.');
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(plainToken.trim()).digest('hex');
+
+    const tokenRecord = await prisma.verificationToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!tokenRecord || tokenRecord.type !== TokenType.ACCOUNT_SETUP) {
+      throw ApiError.badRequest('Invalid or unrecognized account setup link.');
+    }
+
+    if (tokenRecord.usedAt !== null) {
+      throw ApiError.badRequest('This account setup link has already been used. Please log in.');
+    }
+
+    if (tokenRecord.expiresAt < new Date()) {
+      throw ApiError.badRequest(
+        'This account setup link has expired. Please contact an administrator.',
+      );
+    }
+
+    const passwordHash = await passwordService.hash(password);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: tokenRecord.user.id },
+        data: {
+          passwordHash,
+          status: UserStatus.ACTIVE,
+          passwordChangedAt: new Date(),
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      await tx.verificationToken.update({
+        where: { id: tokenRecord.id },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    await auditLogModel.record({
+      actorId: tokenRecord.user.id,
+      actorRole: tokenRecord.user.role,
+      action: 'ACCOUNT_SETUP_COMPLETED',
+      targetType: 'User',
+      targetId: tokenRecord.user.id,
+      metadata: { reason: 'Initial password setup completed via single-use token' },
+    });
+
+    return {
+      success: true,
+      message: 'Account configured and activated successfully. You can now log in.',
+    };
   },
 
   async login(
@@ -94,8 +345,50 @@ export const authService = {
       throw ApiError.unauthorized('Invalid email or password.');
     }
 
+    // Comprehensive lifecycle status enforcement:
+    if (user.status === UserStatus.PENDING_EMAIL_VERIFICATION) {
+      throw new ApiError(
+        403,
+        'Your institutional email has not been verified yet. Please check your inbox for the verification link.',
+        'PENDING_EMAIL_VERIFICATION',
+      );
+    }
+
+    if (user.status === UserStatus.PENDING_ADMIN_VERIFICATION) {
+      throw new ApiError(
+        403,
+        'Your alumni account is pending administrator review and verification. You will be notified via email once approved.',
+        'PENDING_ADMIN_VERIFICATION',
+      );
+    }
+
+    if (user.status === UserStatus.PENDING_SETUP) {
+      throw new ApiError(
+        403,
+        'Your account setup is pending. Please complete your initial password configuration via the setup link sent to your email.',
+        'PENDING_SETUP',
+      );
+    }
+
     if (user.status === UserStatus.SUSPENDED) {
       throw ApiError.accountSuspended();
+    }
+
+    if (user.status === UserStatus.VERIFICATION_REJECTED) {
+      const reasonDetail = user.verificationNote ? ` Reason: ${user.verificationNote}` : '';
+      throw new ApiError(
+        403,
+        `Your verification request was rejected by platform administration.${reasonDetail}`,
+        'VERIFICATION_REJECTED',
+      );
+    }
+
+    if (user.status === UserStatus.DEACTIVATED) {
+      throw new ApiError(403, 'Your account has been deactivated. Please contact administration.', 'ACCOUNT_DEACTIVATED');
+    }
+
+    if (user.status === UserStatus.DELETED || user.status === UserStatus.DELETION_PENDING) {
+      throw new ApiError(403, 'This account is no longer active.', 'ACCOUNT_DELETED');
     }
 
     const emailHash = tokenService.hashToken(email);
@@ -174,7 +467,7 @@ export const authService = {
   },
 
   async refresh(refreshToken: string) {
-    const decoded = tokenService.verifyRefreshToken(refreshToken);
+    tokenService.verifyRefreshToken(refreshToken);
     const tokenHash = tokenService.hashToken(refreshToken);
 
     const session = await sessionModel.findByTokenHash(tokenHash);

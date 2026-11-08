@@ -1,8 +1,7 @@
+import type { EmploymentType, ModerationReasonCode } from '@prisma/client';
 import {
-  EmploymentType,
   JobModerationAction,
   JobStatus,
-  ModerationReasonCode,
   Role,
   WorkMode,
 } from '@prisma/client';

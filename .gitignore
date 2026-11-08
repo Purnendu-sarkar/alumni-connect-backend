@@ -1,11 +1,39 @@
+# Dependencies
 node_modules/
+
+# Production output
 dist/
+build/
+
+# Testing & Coverage
 coverage/
+
+# Environment files
 .env
 .env.*
 !.env.example
+
+# Generated Code & Uploads
 src/generated/
-logs/
-*.log
 uploads/
 
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sw?
+
+# Temporary / Scratch files
+tmp/
+temp/

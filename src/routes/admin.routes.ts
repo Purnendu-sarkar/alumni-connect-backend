@@ -7,6 +7,7 @@ import { requireRole } from '../middlewares/permission.middleware.js';
 import { requireReauth } from '../middlewares/reauth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
+  inviteAdminSchema,
   reviewVerificationSchema,
   userIdParamSchema,
   verificationQuerySchema,
@@ -16,6 +17,14 @@ export const adminRouter = Router();
 
 adminRouter.use(authenticate);
 adminRouter.use(requireRole(Role.SUPER_ADMIN));
+
+// Invitations (Moderator / Super Admin) - sensitive: requires 15-min reauth
+adminRouter.post(
+  '/invitations',
+  requireReauth,
+  validate(inviteAdminSchema),
+  adminPresenter.inviteUser,
+);
 
 adminRouter.get(
   '/verifications',

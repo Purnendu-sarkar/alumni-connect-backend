@@ -69,7 +69,7 @@ export const userService = {
 
       return tx.user.findUnique({
         where: { id: userId },
-        include: { profile: true, privacySetting: true },
+        include: { profile: true, privacy: true },
       });
     });
 

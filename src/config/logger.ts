@@ -5,6 +5,7 @@ import { env } from './index.js';
 export const logger = pino({
   level: env.LOG_LEVEL,
   base: null,
+
   redact: {
     paths: [
       'req.headers.authorization',
@@ -15,11 +16,17 @@ export const logger = pino({
     ],
     censor: '[REDACTED]',
   },
+
   ...(env.NODE_ENV === 'development'
     ? {
         transport: {
-          target: 'pino/file',
-          options: { destination: 1 },
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
+            singleLine: false,
+          },
         },
       }
     : {}),

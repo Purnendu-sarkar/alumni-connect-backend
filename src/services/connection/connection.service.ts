@@ -48,8 +48,6 @@ export const connectionService = {
     userId: string;
     action: 'ACCEPT' | 'REJECT';
   }) {
-    const connection = await connectionModel.findPair(input.userId, input.userId); // or by id
-    // We can also query directly by id
     const targetConn = await (await import('../../config/database.js')).prisma.connection.findUnique({
       where: { id: input.connectionId },
     });

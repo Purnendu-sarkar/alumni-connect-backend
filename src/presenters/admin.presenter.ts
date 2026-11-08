@@ -53,6 +53,25 @@ export const adminPresenter = {
     });
   },
 
+  async inviteUser(req: Request, res: Response) {
+    if (!req.user?.id) throw ApiError.unauthorized();
+
+    const { email, fullName, role, department } = req.body;
+    const result = await adminService.inviteAdmin({
+      inviterId: req.user.id,
+      email,
+      fullName,
+      role,
+      department,
+    });
+
+    return sendSuccess(res, {
+      message: `Invitation email sent successfully to ${email} as ${role}.`,
+      data: result,
+      statusCode: 201,
+    });
+  },
+
   async getStats(_req: Request, res: Response) {
     const stats = await adminService.getPlatformStats();
     return sendSuccess(res, { data: stats });

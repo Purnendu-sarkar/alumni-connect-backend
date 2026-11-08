@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import type { Role } from '@prisma/client';
 
 export const PERMISSIONS = {
   // Directory & Profile

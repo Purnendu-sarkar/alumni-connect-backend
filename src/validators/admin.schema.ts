@@ -26,3 +26,10 @@ export const verificationQuerySchema = z.object({
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional().default('PENDING'),
   search: z.string().trim().optional(),
 });
+
+export const inviteAdminSchema = z.object({
+  email: z.string().trim().email('Valid institutional email is required.'),
+  fullName: z.string().trim().min(2, 'Full name must be at least 2 characters.'),
+  role: z.enum(['MODERATOR', 'SUPER_ADMIN']),
+  department: z.string().trim().optional(),
+});
