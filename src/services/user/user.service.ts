@@ -20,7 +20,9 @@ function computeProfileCompletion(profile: NonNullable<Awaited<ReturnType<typeof
   const roleFields =
     role === 'STUDENT'
       ? [Boolean(profile.studentId), Boolean(profile.currentSemester), Boolean(profile.interests?.length)]
-      : [Boolean(profile.employmentStatus || profile.currentCompany), Boolean(profile.headline), Boolean(profile.linkedinUrl)];
+      : role === 'ALUMNI'
+      ? [Boolean(profile.employmentStatus || profile.currentCompany), Boolean(profile.headline), Boolean(profile.linkedinUrl)]
+      : [Boolean(profile.headline), Boolean(profile.bio)];
 
   const totalFields = [...commonFields, ...roleFields];
   const filledCount = totalFields.filter(Boolean).length;
@@ -158,7 +160,7 @@ export const userService = {
     if (!alumnus) throw ApiError.notFound('Alumni profile');
 
     const isSelf = requester.id === alumniId;
-    const isStaff = requester.role === 'ADMIN' || requester.role === 'SUPER_ADMIN' || requester.role === 'MODERATOR';
+    const isStaff = requester.role === 'SUPER_ADMIN' || requester.role === 'MODERATOR';
 
     // Unverified alumni profiles are hidden from other general users
     if (!alumnus.verified && !isSelf && !isStaff) {

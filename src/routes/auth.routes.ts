@@ -5,10 +5,13 @@ import { authController } from '../controllers/auth.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
+  changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
   resetPasswordSchema,
+  setupAccountSchema,
+  setupAccountValidateSchema,
   verifyEmailSchema,
 } from '../validators/auth.schema.js';
 
@@ -35,6 +38,20 @@ authRouter.post('/login', authRateLimit, validate(loginSchema), authController.l
 authRouter.post('/refresh', refreshRateLimit, authController.refresh);
 authRouter.post('/logout', authController.logout);
 authRouter.get('/me', authenticate, authController.me);
+authRouter.post('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword);
+
+// Moderator Account Setup Endpoints
+authRouter.get(
+  '/setup-account/validate',
+  validate(setupAccountValidateSchema, 'query'),
+  authController.validateSetupAccount,
+);
+authRouter.post(
+  '/setup-account',
+  authRateLimit,
+  validate(setupAccountSchema),
+  authController.setupAccount,
+);
 
 // Password Reset & Email Verification Routes
 authRouter.post(
@@ -53,6 +70,11 @@ authRouter.post(
   '/send-verification-email',
   authenticate,
   authController.sendVerificationEmail,
+);
+authRouter.post(
+  '/resend-verification-email',
+  authRateLimit,
+  authController.resendVerificationEmail,
 );
 authRouter.post(
   '/verify-email',

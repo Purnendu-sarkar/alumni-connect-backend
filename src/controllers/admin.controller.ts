@@ -74,9 +74,70 @@ export const adminController = {
     });
   }),
 
-  getStats: asyncHandler(async (request, response) => {
-    const isSuperAdmin = request.auth!.role === 'SUPER_ADMIN';
-    const stats = await adminService.getStats(request.auth!.universityId, isSuperAdmin);
+  getStats: asyncHandler(async (_request, response) => {
+    const stats = await adminService.getStats();
     return sendSuccess(response, { data: stats });
+  }),
+
+  listAuditLogs: asyncHandler(async (request, response) => {
+    const page = request.query.page ? Number(request.query.page) : 1;
+    const limit = request.query.limit ? Number(request.query.limit) : 50;
+    const result = await adminService.listAuditLogs(page, limit);
+    return sendSuccess(response, {
+      data: result.logs,
+      meta: result.meta,
+    });
+  }),
+
+  inviteModerator: asyncHandler(async (request, response) => {
+    const { email } = request.body as { email: string };
+    const result = await adminService.inviteModerator({
+      email,
+      actorId: request.auth!.userId,
+    });
+    return sendSuccess(response, {
+      statusCode: 201,
+      message: 'Moderator invitation dispatched successfully.',
+      data: result,
+    });
+  }),
+
+  listModeratorInvitations: asyncHandler(async (_request, response) => {
+    const invitations = await adminService.listModeratorInvitations();
+    return sendSuccess(response, { data: invitations });
+  }),
+
+  resendModeratorInvitation: asyncHandler(async (request, response) => {
+    const result = await adminService.resendModeratorInvitation(
+      request.params.id as string,
+      request.auth!.userId,
+    );
+    return sendSuccess(response, {
+      message: 'Invitation resent successfully.',
+      data: result,
+    });
+  }),
+
+  revokeModeratorInvitation: asyncHandler(async (request, response) => {
+    const result = await adminService.revokeModeratorInvitation(
+      request.params.id as string,
+      request.auth!.userId,
+    );
+    return sendSuccess(response, {
+      message: result.message,
+    });
+  }),
+
+  toggleUserSuspension: asyncHandler(async (request, response) => {
+    const { isActive } = request.body as { isActive: boolean };
+    const user = await adminService.toggleUserSuspension({
+      userId: request.params.userId as string,
+      isActive: Boolean(isActive),
+      actorId: request.auth!.userId,
+    });
+    return sendSuccess(response, {
+      message: `User account ${isActive ? 'restored' : 'suspended'}.`,
+      data: user,
+    });
   }),
 };

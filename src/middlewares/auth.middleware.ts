@@ -15,8 +15,20 @@ export const authenticate: RequestHandler = asyncHandler(async (request, _respon
   const payload = tokenService.verifyAccessToken(authorization.slice('Bearer '.length));
   const user = await userRepository.findAuthenticatedById(payload.sub);
 
-  if (!user || !user.isActive || !user.university.isActive) {
-    throw ApiError.unauthorized('This account is unavailable.');
+  if (!user || !user.isActive) {
+    throw ApiError.unauthorized('This account is suspended or unavailable.');
+  }
+
+  if (!user.verified) {
+    throw ApiError.unauthorized('Account email verification is required.');
+  }
+
+  if (user.role.name === 'ALUMNI' && user.verificationStatus !== 'APPROVED') {
+    throw ApiError.unauthorized(
+      user.verificationStatus === 'REJECTED'
+        ? 'Alumni account accreditation was rejected.'
+        : 'Alumni account accreditation is pending administrative review.',
+    );
   }
 
   if (env.NODE_ENV === 'production' && user.isDemo) {

@@ -57,26 +57,28 @@ async function main() {
     create: { name: 'Demo University', slug: 'demo-university', domain: 'example.edu' },
   });
 
-  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.ADMIN } });
+  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.SUPER_ADMIN } });
   const passwordHash = await passwordService.hash(seedAdminPassword!);
 
   await prisma.user.upsert({
     where: { email: seedAdminEmail! },
     update: {
-      name: 'Platform Admin',
+      name: 'Platform Super Admin',
       universityId: university.id,
       roleId: adminRole.id,
       passwordHash,
       verified: true,
+      verificationStatus: 'APPROVED',
       isActive: true,
     },
     create: {
-      name: 'Platform Admin',
+      name: 'Platform Super Admin',
       email: seedAdminEmail!,
       passwordHash,
       universityId: university.id,
       roleId: adminRole.id,
       verified: true,
+      verificationStatus: 'APPROVED',
     },
   });
 

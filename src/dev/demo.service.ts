@@ -27,16 +27,9 @@ export const DEMO_ROLES_INFO = [
     name: 'Monirul Islam (Demo Moderator)',
   },
   {
-    role: RoleName.ADMIN,
-    label: 'University Admin',
-    desc: 'Review verification queue & institutional operations',
-    email: 'demo.admin@demo.edu',
-    name: 'Dr. Anisur Rahman (Demo Admin)',
-  },
-  {
     role: RoleName.SUPER_ADMIN,
     label: 'Super Admin',
-    desc: 'Platform governance, universities & multi-tenant logs',
+    desc: 'Platform governance, members & security audit logs',
     email: 'demo.superadmin@demo.edu',
     name: 'Shakil Mahmud (Demo SuperAdmin)',
   },
@@ -178,34 +171,7 @@ export class DemoService {
     });
     userRecords[RoleName.MODERATOR] = moderatorUser.id;
 
-    // 2.4 Demo Admin
-    const adminUser = await prisma.user.upsert({
-      where: { email: 'demo.admin@demo.edu' },
-      update: {
-        name: 'Dr. Anisur Rahman (Demo Admin)',
-        universityId: demoUniversity.id,
-        roleId: roleMap.get(RoleName.ADMIN)!,
-        verified: true,
-        verificationStatus: VerificationStatus.APPROVED,
-        isDemo: true,
-      },
-      create: {
-        email: 'demo.admin@demo.edu',
-        name: 'Dr. Anisur Rahman (Demo Admin)',
-        passwordHash: demoPasswordHash,
-        universityId: demoUniversity.id,
-        roleId: roleMap.get(RoleName.ADMIN)!,
-        department: 'Registrar & Alumni Affairs Office',
-        headline: 'Director of Alumni Relations',
-        verified: true,
-        verificationStatus: VerificationStatus.APPROVED,
-        onboardingCompleted: true,
-        isDemo: true,
-      },
-    });
-    userRecords[RoleName.ADMIN] = adminUser.id;
-
-    // 2.5 Demo Super Admin (separate from permanent platform owner)
+    // 2.4 Demo Super Admin (separate from permanent platform owner)
     const superAdminUser = await prisma.user.upsert({
       where: { email: 'demo.superadmin@demo.edu' },
       update: {
@@ -260,7 +226,7 @@ export class DemoService {
         id: 'demo-job-approved-01',
         universityId: demoUniversity.id,
         postedById: alumniUser.id,
-        approvedById: adminUser.id,
+        approvedById: superAdminUser.id,
         title: 'Senior Cloud Systems Engineer',
         company: 'Apex Cloud Solutions',
         location: 'Dhaka (Hybrid)',

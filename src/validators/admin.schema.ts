@@ -26,3 +26,20 @@ export const verificationQuerySchema = z.object({
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional().default('PENDING'),
   search: z.string().trim().optional(),
 });
+
+export const inviteModeratorSchema = z.object({
+  email: z.string().email('Please enter a valid email address.').trim().toLowerCase(),
+});
+
+export const invitationIdParamSchema = z.object({
+  id: z.string().min(1, 'Invitation ID is required.'),
+});
+
+export const toggleSuspensionSchema = z.object({
+  isActive: z.boolean(),
+});
+
+export const auditLogQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+});

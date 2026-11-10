@@ -6,14 +6,13 @@ import { userRepository } from '../../src/repositories/user.repository.js';
 import { env } from '../../src/config/index.js';
 
 describe('Demo Module & Production Safeguards', () => {
-  it('defines fixtures for all 5 canonical demo roles', () => {
+  it('defines fixtures for all 4 canonical demo roles', () => {
     const roles = DEMO_ROLES_INFO.map((acc) => acc.role);
     expect(roles).toContain('STUDENT');
     expect(roles).toContain('ALUMNI');
     expect(roles).toContain('MODERATOR');
-    expect(roles).toContain('ADMIN');
     expect(roles).toContain('SUPER_ADMIN');
-    expect(roles).toHaveLength(5);
+    expect(roles).toHaveLength(4);
   });
 
   it('rejects demo login schema for non-allowlisted roles', () => {

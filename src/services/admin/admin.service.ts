@@ -1,5 +1,8 @@
+import crypto from 'node:crypto';
 import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
+import { tokenRepository } from '../../repositories/token.repository.js';
+import { emailService } from '../email/email.service.js';
 import {
   userRepository,
   type VerificationFilters,
@@ -34,6 +37,19 @@ export const adminService = {
       input.reason,
     );
 
+    // If rejected, immediately invalidate active sessions for security
+    if (input.status === 'REJECTED') {
+      await tokenRepository.revokeByUserId(input.userId);
+    }
+
+    // Send decision email
+    await emailService.sendVerificationDecisionEmail(
+      target.email,
+      target.name,
+      input.status,
+      input.reason,
+    );
+
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.actorId,
@@ -51,6 +67,240 @@ export const adminService = {
       ...input,
       status: 'APPROVED',
     });
+  },
+
+  async getStats() {
+    const { prisma } = await import('../../config/database.js');
+
+    const [
+      totalStudents,
+      totalAlumni,
+      totalModerators,
+      pendingVerifications,
+      totalJobs,
+      pendingJobs,
+      auditLogsCount,
+    ] = await Promise.all([
+      prisma.user.count({ where: { role: { name: 'STUDENT' } } }),
+      prisma.user.count({ where: { role: { name: 'ALUMNI' } } }),
+      prisma.user.count({ where: { role: { name: 'MODERATOR' } } }),
+      prisma.user.count({ where: { verificationStatus: 'PENDING' } }),
+      prisma.job.count({ where: { status: 'APPROVED' } }),
+      prisma.job.count({ where: { status: 'PENDING' } }),
+      prisma.auditLog.count(),
+    ]);
+
+    return {
+      scope: 'PLATFORM',
+      totalStudents,
+      totalAlumni,
+      totalModerators,
+      pendingVerifications,
+      totalJobs,
+      pendingJobs,
+      auditLogsCount,
+    };
+  },
+
+  async listAuditLogs(page = 1, limit = 50) {
+    const { prisma } = await import('../../config/database.js');
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        include: {
+          actor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.auditLog.count(),
+    ]);
+
+    return {
+      logs: logs.map((l) => ({
+        id: l.id,
+        action: l.action,
+        actorName: l.actor.name,
+        actorRole: l.actor.role.name,
+        target: l.targetType ? `${l.targetType}:${l.targetId ?? ''}` : 'System',
+        details: l.metadata ? JSON.stringify(l.metadata) : l.action,
+        timestamp: l.createdAt.toISOString(),
+      })),
+      meta: toPageMeta(page, limit, total),
+    };
+  },
+
+  async inviteModerator(input: { email: string; actorId: string }) {
+    const { prisma } = await import('../../config/database.js');
+    const normalizedEmail = input.email.trim().toLowerCase();
+
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingUser) {
+      throw ApiError.conflict('A user with this email address already exists.');
+    }
+
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1_000); // 72 hours
+
+    const invitation = await prisma.moderatorInvitation.upsert({
+      where: { email: normalizedEmail },
+      update: {
+        tokenHash,
+        expiresAt,
+        revokedAt: null,
+        acceptedAt: null,
+        invitedBy: { connect: { id: input.actorId } },
+      },
+      create: {
+        email: normalizedEmail,
+        tokenHash,
+        expiresAt,
+        invitedBy: { connect: { id: input.actorId } },
+      },
+    });
+
+    const emailResult = await emailService.sendModeratorInvitationEmail(normalizedEmail, plainToken);
+
+    const university = await prisma.university.findFirst();
+    if (university) {
+      await auditLogRepository.record({
+        universityId: university.id,
+        actorId: input.actorId,
+        action: 'moderator.invited',
+        targetType: 'invitation',
+        targetId: invitation.id,
+        metadata: { email: normalizedEmail },
+      });
+    }
+
+    return {
+      id: invitation.id,
+      email: invitation.email,
+      expiresAt: invitation.expiresAt,
+      deliveredViaSmtp: emailResult.deliveredViaSmtp,
+      setupUrl: emailResult.setupUrl,
+    };
+  },
+
+  async listModeratorInvitations() {
+    const { prisma } = await import('../../config/database.js');
+    return prisma.moderatorInvitation.findMany({
+      include: {
+        invitedBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  async resendModeratorInvitation(id: string, actorId: string) {
+    const { prisma } = await import('../../config/database.js');
+    const invitation = await prisma.moderatorInvitation.findUnique({ where: { id } });
+    if (!invitation) throw ApiError.notFound('Invitation');
+    if (invitation.acceptedAt) throw ApiError.badRequest('This invitation has already been accepted.');
+
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1_000);
+
+    await prisma.moderatorInvitation.update({
+      where: { id },
+      data: { tokenHash, expiresAt, revokedAt: null },
+    });
+
+    const emailResult = await emailService.sendModeratorInvitationEmail(invitation.email, plainToken);
+
+    const university = await prisma.university.findFirst();
+    if (university) {
+      await auditLogRepository.record({
+        universityId: university.id,
+        actorId,
+        action: 'moderator.invitation_resent',
+        targetType: 'invitation',
+        targetId: invitation.id,
+      });
+    }
+
+    return {
+      success: true,
+      deliveredViaSmtp: emailResult.deliveredViaSmtp,
+      setupUrl: emailResult.setupUrl,
+    };
+  },
+
+  async revokeModeratorInvitation(id: string, actorId: string) {
+    const { prisma } = await import('../../config/database.js');
+    const invitation = await prisma.moderatorInvitation.findUnique({ where: { id } });
+    if (!invitation) throw ApiError.notFound('Invitation');
+    if (invitation.acceptedAt) throw ApiError.badRequest('Cannot revoke an already accepted invitation.');
+
+    await prisma.moderatorInvitation.update({
+      where: { id },
+      data: { revokedAt: new Date() },
+    });
+
+    const university = await prisma.university.findFirst();
+    if (university) {
+      await auditLogRepository.record({
+        universityId: university.id,
+        actorId,
+        action: 'moderator.invitation_revoked',
+        targetType: 'invitation',
+        targetId: invitation.id,
+      });
+    }
+
+    return { success: true, message: 'Invitation revoked.' };
+  },
+
+  async toggleUserSuspension(input: { userId: string; isActive: boolean; actorId: string }) {
+    const { prisma } = await import('../../config/database.js');
+    if (input.userId === input.actorId) {
+      throw ApiError.badRequest('You cannot suspend or deactivate your own Super Admin account.');
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: input.userId },
+      include: { role: true },
+    });
+    if (!targetUser) throw ApiError.notFound('User');
+
+    // Protect last active Super Admin
+    if (targetUser.role.name === 'SUPER_ADMIN' && !input.isActive) {
+      const activeSuperAdmins = await prisma.user.count({
+        where: { role: { name: 'SUPER_ADMIN' }, isActive: true },
+      });
+      if (activeSuperAdmins <= 1) {
+        throw ApiError.badRequest('The last remaining active Super Admin cannot be suspended.');
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: input.userId },
+      data: { isActive: input.isActive },
+      select: { id: true, name: true, email: true, isActive: true },
+    });
+
+    if (!input.isActive) {
+      await tokenRepository.revokeByUserId(input.userId);
+    }
+
+    await auditLogRepository.record({
+      universityId: targetUser.universityId,
+      actorId: input.actorId,
+      action: input.isActive ? 'user.restored' : 'user.suspended',
+      targetType: 'user',
+      targetId: input.userId,
+    });
+
+    return updated;
   },
 
   async listUniversities() {
@@ -121,45 +371,5 @@ export const adminService = {
     });
 
     return university;
-  },
-
-  async getStats(universityId: string, isSuperAdmin: boolean) {
-    const { prisma } = await import('../../config/database.js');
-
-    if (isSuperAdmin) {
-      const [totalUniversities, totalUsers, totalJobs, pendingVerifications, auditLogsCount] = await Promise.all([
-        prisma.university.count(),
-        prisma.user.count(),
-        prisma.job.count(),
-        prisma.user.count({ where: { verificationStatus: 'PENDING' } }),
-        prisma.auditLog.count(),
-      ]);
-
-      return {
-        scope: 'PLATFORM',
-        totalUniversities,
-        totalUsers,
-        totalJobs,
-        pendingVerifications,
-        auditLogsCount,
-      };
-    }
-
-    const [totalStudents, totalAlumni, pendingVerifications, activeJobs, pendingJobs] = await Promise.all([
-      prisma.user.count({ where: { universityId, role: { name: 'STUDENT' } } }),
-      prisma.user.count({ where: { universityId, role: { name: 'ALUMNI' } } }),
-      prisma.user.count({ where: { universityId, verificationStatus: 'PENDING' } }),
-      prisma.job.count({ where: { universityId, status: 'APPROVED' } }),
-      prisma.job.count({ where: { universityId, status: 'PENDING' } }),
-    ]);
-
-    return {
-      scope: 'UNIVERSITY',
-      totalStudents,
-      totalAlumni,
-      pendingVerifications,
-      activeJobs,
-      pendingJobs,
-    };
   },
 };

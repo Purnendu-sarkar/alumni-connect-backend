@@ -11,7 +11,6 @@ enum RoleName {
   STUDENT
   ALUMNI
   MODERATOR
-  ADMIN
   SUPER_ADMIN
 }
 
@@ -123,10 +122,12 @@ model User {
   onboardingCompleted Boolean             @default(false)
   isActive            Boolean             @default(true)
   isDemo              Boolean             @default(false)
+  needPasswordChange  Boolean             @default(false)
   university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
   role                Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
   refreshTokens       RefreshToken[]
   verificationTokens  VerificationToken[]
+  moderatorInvitationsSent ModeratorInvitation[] @relation("ModeratorInviter")
   sentConnections     Connection[]        @relation("ConnectionRequester")
   receivedConnections Connection[]        @relation("ConnectionRecipient")
   mentoringRequests   MentorshipRequest[] @relation("Mentor")
@@ -399,3 +400,20 @@ model VerificationToken {
   @@index([userId, type])
   @@index([tokenHash])
 }
+
+model ModeratorInvitation {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  tokenHash   String    @unique
+  invitedById String
+  invitedBy   User      @relation("ModeratorInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([email])
+  @@index([tokenHash])
+}
+
