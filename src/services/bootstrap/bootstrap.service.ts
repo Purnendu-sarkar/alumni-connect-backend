@@ -106,6 +106,7 @@ export class BootstrapService {
           verificationStatus: 'APPROVED',
           verifiedAt: new Date(),
           onboardingCompleted: true,
+          needPasswordChange: true,
           isActive: true,
           isDemo: false,
         },

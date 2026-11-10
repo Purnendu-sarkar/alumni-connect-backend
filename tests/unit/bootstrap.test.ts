@@ -13,7 +13,7 @@ describe('BootstrapService', () => {
       vi.spyOn(prisma.role, 'upsert').mockResolvedValue({ id: 'role-1' } as any);
 
       await expect(bootstrapService.ensureRolesAndPermissions()).resolves.toBeUndefined();
-      expect(prisma.role.upsert).toHaveBeenCalledTimes(5); // STUDENT, ALUMNI, MODERATOR, ADMIN, SUPER_ADMIN
+      expect(prisma.role.upsert).toHaveBeenCalledTimes(4); // STUDENT, ALUMNI, MODERATOR, SUPER_ADMIN
     });
   });
 

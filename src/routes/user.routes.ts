@@ -4,9 +4,11 @@ import { Router } from 'express';
 import multer from 'multer';
 
 import { ApiError } from '../errors/api-error.js';
+import { authController } from '../controllers/auth.controller.js';
 import { userController } from '../controllers/user.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
+import { changePasswordSchema } from '../validators/auth.schema.js';
 import { updateProfileSchema } from '../validators/user.schema.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads', 'avatars');
@@ -46,5 +48,6 @@ userRouter.use(authenticate);
 
 userRouter.get('/me', userController.getMe);
 userRouter.patch('/me', validate(updateProfileSchema), userController.updateMe);
+userRouter.post('/change-password', validate(changePasswordSchema), authController.changePassword);
 userRouter.post('/me/avatar', upload.single('avatar'), userController.uploadAvatar);
 userRouter.delete('/me/avatar', userController.removeAvatar);

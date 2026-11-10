@@ -201,10 +201,19 @@ export const passwordResetService = {
       throw ApiError.badRequest('This verification link has expired. Please request a new one.');
     }
 
+    const targetUser = await prisma.user.findUnique({
+      where: { id: tokenRecord.user.id },
+      include: { role: true },
+    });
+    const isStudent = targetUser?.role.name === 'STUDENT';
+
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: tokenRecord.user.id },
-        data: { verified: true },
+        data: {
+          verified: true,
+          ...(isStudent ? { verificationStatus: 'APPROVED' } : {}),
+        },
       });
 
       await tx.verificationToken.update({
@@ -223,7 +232,10 @@ export const passwordResetService = {
 
     return {
       success: true,
-      message: 'Email address verified successfully.',
+      role: targetUser?.role.name,
+      message: isStudent
+        ? 'Email address verified successfully. Your student account is now active. Please sign in.'
+        : 'Email address verified successfully. Your alumni account is pending administrative verification.',
     };
   },
 };

@@ -67,3 +67,18 @@ export const resetPasswordSchema = z.object({
 export const verifyEmailSchema = z.object({
   token: z.string().trim().min(1, 'Verification token is required.'),
 });
+
+export const setupAccountValidateSchema = z.object({
+  token: z.string().trim().min(1, 'Setup token is required.'),
+});
+
+export const setupAccountSchema = z.object({
+  token: z.string().trim().min(1, 'Setup token is required.'),
+  name: z.string().trim().min(2, 'Name must be at least 2 characters.').max(100),
+  password: passwordSchema,
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required.'),
+  newPassword: passwordSchema,
+});

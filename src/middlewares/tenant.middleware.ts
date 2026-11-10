@@ -4,17 +4,19 @@ import { ApiError } from '../errors/api-error.js';
 import { universityRepository } from '../repositories/university.repository.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
-/** Resolves public tenant context from a custom domain sent by the frontend. */
+/** Resolves university context (defaults to canonical single institution). */
 export const resolveTenant: RequestHandler = asyncHandler(async (request, _response, next) => {
   if (request.tenant) return next();
 
   const domain = request.header('x-tenant-domain')?.trim().toLowerCase();
-  if (!domain) {
-    throw ApiError.badRequest('The x-tenant-domain header is required for this public endpoint.');
+  let university = domain ? await universityRepository.findByDomain(domain) : null;
+
+  if (!university) {
+    const { prisma } = await import('../config/database.js');
+    university = await prisma.university.findFirst({ where: { isActive: true } });
   }
 
-  const university = await universityRepository.findByDomain(domain);
-  if (!university || !university.isActive) throw ApiError.notFound('Active university');
+  if (!university || !university.isActive) throw ApiError.notFound('Active university institution');
 
   request.tenant = { id: university.id, slug: university.slug, domain: university.domain };
   next();
