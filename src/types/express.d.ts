@@ -16,6 +16,11 @@ declare global {
         slug: string;
         domain: string;
       };
+      errorContext?: {
+        code: string;
+        message: string;
+        isOperational: boolean;
+      };
     }
   }
 }

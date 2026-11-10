@@ -52,7 +52,21 @@ function decode(token: string, secret: string): DecodedToken {
     return decoded as DecodedToken;
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw ApiError.unauthorized('The authentication token is invalid or expired.');
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new ApiError(401, 'The authentication token has expired.', 'TOKEN_EXPIRED');
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      if (error.message.includes('malformed')) {
+        throw new ApiError(401, 'The authentication token is malformed.', 'TOKEN_MALFORMED');
+      }
+      if (error.message.includes('signature')) {
+        throw new ApiError(401, 'The authentication token has an invalid signature.', 'TOKEN_SIGNATURE_INVALID');
+      }
+    }
+    if (error instanceof jwt.NotBeforeError) {
+      throw new ApiError(401, 'The authentication token is not yet active.', 'TOKEN_NOT_ACTIVE');
+    }
+    throw new ApiError(401, 'The authentication token is invalid or expired.', 'TOKEN_INVALID');
   }
 }
 

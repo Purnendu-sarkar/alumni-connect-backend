@@ -38,7 +38,9 @@ class EmailService {
       });
       logger.info(
         { host: env.SMTP_HOST, port: env.SMTP_PORT },
-        'Email service initialized (Mailpit / Local SMTP target).',
+        env.NODE_ENV === 'development'
+          ? `[EMAIL] Email service initialized. Target: ${env.SMTP_HOST}:${env.SMTP_PORT}`
+          : 'Email service initialized successfully.',
       );
     } catch (err) {
       logger.warn({ err }, 'Failed to initialize SMTP transporter. Falling back to in-memory email capture.');

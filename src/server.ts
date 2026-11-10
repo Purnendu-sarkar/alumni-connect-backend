@@ -11,9 +11,20 @@ const server = createServer(app);
 
 async function startServer() {
   try {
+    if (env.NODE_ENV === 'development') {
+      console.log('\n==================================================');
+      console.log('              ALUMNI CONNECT API');
+      console.log('==================================================\n');
+      logger.info(`[INFO] Environment: ${env.NODE_ENV}`);
+      logger.info(`[INFO] Application: AlumniConnect API`);
+      logger.info(`[INFO] Port: ${env.PORT}`);
+      logger.info('[STARTUP] Initializing application...');
+      logger.info('[DATABASE] Connecting to PostgreSQL...');
+    }
+
     // Step 1: Ensure database connectivity
     await prisma.$queryRaw`SELECT 1`;
-    logger.info('Database connection established and verified.');
+    logger.info('[SUCCESS] Database connected successfully!');
 
     // Step 2: Ensure canonical roles, permissions, and permanent Super Admin
     await bootstrapService.initialize();
@@ -24,13 +35,22 @@ async function startServer() {
         const { initializeDevDemo } = await import('./dev/index.js');
         await initializeDevDemo();
       } catch (err) {
-        logger.warn(err, 'Development demo module initialization skipped or not bundled.');
+        logger.warn(err, '[DEMO] Development demo module initialization skipped or not bundled.');
       }
     }
 
     // Step 4: Begin listening for incoming HTTP requests
     server.listen(env.PORT, () => {
-      logger.info({ port: env.PORT, environment: env.NODE_ENV }, 'AlumniConnect API is listening');
+      if (env.NODE_ENV === 'development') {
+        logger.info('[SERVER] API server started successfully.');
+        logger.info(`[SERVER] Base URL: http://localhost:${env.PORT}`);
+        logger.info(`[SERVER] API Base: http://localhost:${env.PORT}/api/v1`);
+        console.log('\n==================================================');
+        console.log('                 SERVER READY');
+        console.log('==================================================\n');
+      } else {
+        logger.info({ port: env.PORT, environment: env.NODE_ENV }, 'AlumniConnect API is listening');
+      }
     });
   } catch (error) {
     logger.fatal(error, 'Startup lifecycle failed. Halting process to prevent unauthenticated/inconsistent state.');

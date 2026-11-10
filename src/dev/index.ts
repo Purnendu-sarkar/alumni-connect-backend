@@ -25,7 +25,7 @@ export function registerDemoRoutes(router: Router): void {
     return;
   }
   router.use('/dev/demo', demoRouter);
-  logger.info('Development Demo module mounted at /api/v1/dev/demo');
+  logger.info('[DEMO] Development Demo module mounted at /api/v1/dev/demo');
 }
 
 export { demoService } from './demo.service.js';

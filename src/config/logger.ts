@@ -18,8 +18,13 @@ export const logger = pino({
   ...(env.NODE_ENV === 'development'
     ? {
         transport: {
-          target: 'pino/file',
-          options: { destination: 1 },
+          target: import.meta.resolve('pino-pretty'),
+          options: {
+            colorize: true,
+            translateTime: 'SYS:HH:MM:ss',
+            ignore: 'pid,hostname',
+            singleLine: true,
+          },
         },
       }
     : {}),

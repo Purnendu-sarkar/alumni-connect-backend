@@ -14,7 +14,7 @@ export class BootstrapService {
    * Completely idempotent and concurrency-safe via PostgreSQL transaction advisory lock.
    */
   async initialize(): Promise<{ status: 'existing' | 'created'; superAdminId: string }> {
-    logger.info('Starting system initialization & role/permission verification...');
+    logger.info('[AUTH] Verifying platform roles and permissions...');
 
     // Step 1: Ensure canonical roles & permissions exist
     await this.ensureRolesAndPermissions();
@@ -40,7 +40,9 @@ export class BootstrapService {
 
       if (existingSuperAdmin) {
         logger.info(
-          { superAdminId: existingSuperAdmin.id },
+          env.NODE_ENV === 'development'
+            ? '[SUCCESS] Platform Super Admin verified.'
+            : { status: 'verified' },
           'Permanent platform Super Admin is verified. Existing credentials & profile preserved.',
         );
         return { status: 'existing', superAdminId: existingSuperAdmin.id };
@@ -121,7 +123,9 @@ export class BootstrapService {
       const maskedEmail = `${localPart.slice(0, 2)}***@${domain}`;
 
       logger.info(
-        { superAdminId: created.id, maskedEmail },
+        env.NODE_ENV === 'development'
+          ? `[SUCCESS] Platform Super Admin bootstrapped successfully (${maskedEmail}).`
+          : { status: 'created', maskedEmail },
         'Permanent Super Admin successfully bootstrapped and secured.',
       );
 

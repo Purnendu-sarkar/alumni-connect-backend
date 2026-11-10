@@ -46,7 +46,7 @@ export class DemoService {
       return;
     }
 
-    logger.info('Initializing development demo accounts and test fixtures...');
+    logger.info('[DEMO] Initializing development demo accounts and test fixtures...');
 
     // 1. Ensure Sandbox University
     const demoUniversity = await prisma.university.upsert({
@@ -295,7 +295,7 @@ export class DemoService {
       },
     });
 
-    logger.info('Development demo accounts, sandbox fixtures, and queues ready.');
+    logger.info('[SUCCESS] Demo accounts and test fixtures ready.');
   }
 
   /**

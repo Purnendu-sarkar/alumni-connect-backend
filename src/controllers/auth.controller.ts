@@ -54,6 +54,7 @@ export const authController = {
   logout: asyncHandler(async (request, response) => {
     await authService.logout(request.cookies.refreshToken as string | undefined);
     response.clearCookie('refreshToken', refreshCookieOptions);
+    response.clearCookie('refreshToken', { ...refreshCookieOptions, path: '/' });
     return sendSuccess(response, { message: 'Signed out successfully.' });
   }),
 
@@ -145,10 +146,14 @@ export const authController = {
   verifyEmail: asyncHandler(async (request, response) => {
     const { token } = request.body as { token: string };
     const { passwordResetService } = await import('../services/auth/password-reset.service.js');
-    const result = await passwordResetService.verifyEmail(token);
+    const result = (await passwordResetService.verifyEmail(token)) as {
+      success: boolean;
+      role?: string;
+      message: string;
+    };
     return sendSuccess(response, {
       message: result.message,
-      data: { role: (result as any).role },
+      data: { role: result.role },
     });
   }),
 };

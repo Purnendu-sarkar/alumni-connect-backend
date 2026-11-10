@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { STATUS_CODES } from 'node:http';
 import express, { type RequestHandler, type Request, type Response } from 'express';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -24,16 +25,28 @@ const requestLogger: RequestHandler = (request, response, next) => {
   const startedAt = process.hrtime.bigint();
   response.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-    logger.info(
-      {
-        requestId: request.requestId,
-        method: request.method,
-        path: request.originalUrl,
-        statusCode: response.statusCode,
-        durationMs,
-      },
-      'Request completed',
-    );
+    const durationFormatted = `${(durationMs / 1000).toFixed(2)}s`;
+    const statusText = STATUS_CODES[response.statusCode] || '';
+    const errorContext = request.errorContext;
+
+    const logPayload = {
+      requestId: request.requestId,
+      method: request.method,
+      path: request.originalUrl,
+      statusCode: response.statusCode,
+      durationMs,
+      ...(errorContext?.code ? { errorCode: errorContext.code } : {}),
+    };
+
+    const logMessage = `[HTTP] ${request.method} ${request.originalUrl} ${response.statusCode} ${statusText} (${durationFormatted})`;
+
+    if (response.statusCode >= 500) {
+      logger.error(logPayload, logMessage);
+    } else if (response.statusCode >= 400) {
+      logger.warn(logPayload, logMessage);
+    } else {
+      logger.info(logPayload, logMessage);
+    }
   });
   next();
 };
