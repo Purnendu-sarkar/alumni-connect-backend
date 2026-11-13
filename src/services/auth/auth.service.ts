@@ -95,6 +95,24 @@ export const authService = {
       throw ApiError.conflict('An account with this email address already exists.');
     }
 
+    if (input.role === 'STUDENT' && input.studentId) {
+      const existingStudent = await prisma.user.findFirst({
+        where: { universityId: university.id, studentId: input.studentId },
+      });
+      if (existingStudent) {
+        throw ApiError.conflict('An account with this Student ID already exists.');
+      }
+    }
+
+    if (input.role === 'ALUMNI' && input.academicId) {
+      const existingAlumni = await prisma.user.findFirst({
+        where: { universityId: university.id, academicId: input.academicId },
+      });
+      if (existingAlumni) {
+        throw ApiError.conflict('An account with this Academic / Student ID already exists.');
+      }
+    }
+
     const passwordHash = await passwordService.hash(input.password);
     const user = await userRepository.create({
       ...input,
@@ -132,6 +150,14 @@ export const authService = {
     const passwordMatches = await passwordService.verify(user.passwordHash, password);
     if (!passwordMatches) throw ApiError.unauthorized('Email or password is incorrect.');
 
+    // Enforce Alumni administrative rejection check first so rejected alumni receive their explicit rejection message and reason
+    if (user.role?.name === 'ALUMNI' && user.verificationStatus === 'REJECTED') {
+      throw ApiError.unauthorized(
+        'Your alumni accreditation was rejected: ' +
+          (user.rejectionReason || 'Please contact administration.'),
+      );
+    }
+
     // Enforce email verification check
     if (!user.verified) {
       throw ApiError.unauthorized(
@@ -140,18 +166,10 @@ export const authService = {
     }
 
     // Enforce Alumni administrative verification check
-    if (user.role.name === 'ALUMNI') {
-      if (user.verificationStatus === 'REJECTED') {
-        throw ApiError.unauthorized(
-          'Your alumni accreditation was rejected: ' +
-            (user.rejectionReason || 'Please contact administration.'),
-        );
-      }
-      if (user.verificationStatus === 'PENDING') {
-        throw ApiError.unauthorized(
-          'Your alumni registration is awaiting administrative verification. You will receive an email once approved.',
-        );
-      }
+    if (user.role?.name === 'ALUMNI' && user.verificationStatus === 'PENDING') {
+      throw ApiError.unauthorized(
+        'Your alumni registration is awaiting administrative verification. You will receive an email once approved.',
+      );
     }
 
     return issueSession(user);

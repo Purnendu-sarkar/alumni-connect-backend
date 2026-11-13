@@ -6,6 +6,7 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { requirePermission } from '../middlewares/permission.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
+  adminUsersQuerySchema,
   auditLogQuerySchema,
   invitationIdParamSchema,
   inviteModeratorSchema,
@@ -18,6 +19,28 @@ import {
 export const adminRouter = Router();
 
 adminRouter.use(authenticate);
+
+// User Management Roster & Detail Endpoints
+adminRouter.get(
+  '/users',
+  requirePermission(PERMISSIONS.USER_VERIFY),
+  validate(adminUsersQuerySchema, 'query'),
+  adminController.listUsers,
+);
+
+adminRouter.get(
+  '/users/:userId',
+  requirePermission(PERMISSIONS.USER_VERIFY),
+  validate(userIdParamSchema, 'params'),
+  adminController.getUserDetail,
+);
+
+adminRouter.delete(
+  '/users/:userId/sessions',
+  requirePermission(PERMISSIONS.USER_VERIFY),
+  validate(userIdParamSchema, 'params'),
+  adminController.terminateUserSessions,
+);
 
 // Verification Queue Endpoints
 adminRouter.get(
@@ -35,7 +58,22 @@ adminRouter.patch(
   adminController.reviewVerification,
 );
 
+adminRouter.post(
+  '/users/:userId/verification',
+  requirePermission(PERMISSIONS.USER_VERIFY),
+  validate(userIdParamSchema, 'params'),
+  validate(reviewVerificationSchema),
+  adminController.reviewVerification,
+);
+
 adminRouter.patch(
+  '/users/:userId/verify',
+  requirePermission(PERMISSIONS.USER_VERIFY),
+  validate(userIdParamSchema, 'params'),
+  adminController.verifyUser,
+);
+
+adminRouter.post(
   '/users/:userId/verify',
   requirePermission(PERMISSIONS.USER_VERIFY),
   validate(userIdParamSchema, 'params'),

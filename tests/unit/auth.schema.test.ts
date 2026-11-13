@@ -22,6 +22,7 @@ const baseAlumniWithoutJob = {
   role: 'ALUMNI' as const,
   batch: '2020',
   department: 'CSE',
+  academicId: '160102',
   employmentStatus: 'seeking_employment',
 };
 

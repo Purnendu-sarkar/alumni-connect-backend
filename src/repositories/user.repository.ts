@@ -24,6 +24,13 @@ export interface VerificationFilters extends PaginationInput {
   search?: string;
 }
 
+export interface AdminUserFilters extends PaginationInput {
+  role?: RoleName;
+  status?: 'ACTIVE' | 'SUSPENDED';
+  verificationStatus?: VerificationStatus;
+  search?: string;
+}
+
 export const userRepository = {
   findAuthenticatedById(id: string): Promise<AuthenticatedUserRecord | null> {
     return prisma.user.findUnique({ where: { id }, include: authenticatedUserInclude });
@@ -245,8 +252,10 @@ export const userRepository = {
   listVerifications(universityId: string, filters: VerificationFilters) {
     const where: Prisma.UserWhereInput = {
       universityId,
+      // Only email-verified users can be processed for administrative accreditation
+      verified: true,
+      role: { name: filters.role ?? 'ALUMNI' },
       ...(filters.status ? { verificationStatus: filters.status } : {}),
-      ...(filters.role ? { role: { name: filters.role } } : {}),
       ...(filters.search
         ? {
             OR: [
@@ -254,7 +263,6 @@ export const userRepository = {
               { email: { contains: filters.search, mode: 'insensitive' } },
               { department: { contains: filters.search, mode: 'insensitive' } },
               { batch: { contains: filters.search, mode: 'insensitive' } },
-              { studentId: { contains: filters.search, mode: 'insensitive' } },
               { academicId: { contains: filters.search, mode: 'insensitive' } },
               { currentCompany: { contains: filters.search, mode: 'insensitive' } },
             ],
@@ -294,6 +302,108 @@ export const userRepository = {
     ]);
   },
 
+  listAdminUsers(universityId: string, filters: AdminUserFilters) {
+    const where: Prisma.UserWhereInput = {
+      universityId,
+      ...(filters.role ? { role: { name: filters.role } } : {}),
+      ...(filters.status ? { isActive: filters.status === 'ACTIVE' } : {}),
+      ...(filters.verificationStatus ? { verificationStatus: filters.verificationStatus } : {}),
+      ...(filters.search
+        ? {
+            OR: [
+              { name: { contains: filters.search, mode: 'insensitive' } },
+              { email: { contains: filters.search, mode: 'insensitive' } },
+              { department: { contains: filters.search, mode: 'insensitive' } },
+              { batch: { contains: filters.search, mode: 'insensitive' } },
+              { studentId: { contains: filters.search, mode: 'insensitive' } },
+              { academicId: { contains: filters.search, mode: 'insensitive' } },
+              { currentCompany: { contains: filters.search, mode: 'insensitive' } },
+              { position: { contains: filters.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    return prisma.$transaction([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          batch: true,
+          department: true,
+          studentId: true,
+          academicId: true,
+          currentSemester: true,
+          graduationYear: true,
+          employmentStatus: true,
+          currentCompany: true,
+          position: true,
+          avatarUrl: true,
+          verified: true,
+          verificationStatus: true,
+          isActive: true,
+          isDemo: true,
+          needPasswordChange: true,
+          createdAt: true,
+          updatedAt: true,
+          role: { select: { id: true, name: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        skip: (filters.page - 1) * filters.limit,
+        take: filters.limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+  },
+
+  async findUserDetailForAdmin(userId: string, universityId: string) {
+    const user = await prisma.user.findFirst({
+      where: { id: userId, universityId },
+      include: {
+        role: { select: { id: true, name: true, description: true } },
+        university: { select: { id: true, name: true, slug: true, domain: true } },
+        refreshTokens: {
+          select: {
+            id: true,
+            createdAt: true,
+            expiresAt: true,
+            revokedAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    if (!user) return null;
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        universityId,
+        OR: [{ targetId: userId }, { actorId: userId }],
+      },
+      select: {
+        id: true,
+        action: true,
+        targetType: true,
+        targetId: true,
+        createdAt: true,
+        metadata: true,
+        actor: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const { passwordHash, ...safeUser } = user;
+    return {
+      ...safeUser,
+      auditLogs,
+    };
+  },
+
   verifyForUniversity(userId: string, universityId: string) {
     return prisma.user.update({
       where: { id: userId, universityId },
@@ -310,17 +420,59 @@ export const userRepository = {
   reviewVerification(
     userId: string,
     universityId: string,
-    status: 'APPROVED' | 'REJECTED',
+    status: 'APPROVED' | 'REJECTED' | 'REVOKED',
     reason?: string,
   ) {
-    const isApproved = status === 'APPROVED';
+    if (status === 'APPROVED') {
+      return prisma.user.update({
+        where: { id: userId, universityId },
+        data: {
+          verified: true,
+          verificationStatus: 'APPROVED',
+          verifiedAt: new Date(),
+          rejectionReason: null,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          verified: true,
+          verificationStatus: true,
+          rejectionReason: true,
+          verifiedAt: true,
+          role: { select: { name: true } },
+        },
+      });
+    }
+
+    if (status === 'REVOKED') {
+      return prisma.user.update({
+        where: { id: userId, universityId },
+        data: {
+          verificationStatus: 'PENDING',
+          verifiedAt: null,
+          rejectionReason: reason ?? 'Accreditation revoked by administrator.',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          verified: true,
+          verificationStatus: true,
+          rejectionReason: true,
+          verifiedAt: true,
+          role: { select: { name: true } },
+        },
+      });
+    }
+
+    // REJECTED: Notice that verified is NOT modified. Existing email verification status is strictly preserved.
     return prisma.user.update({
       where: { id: userId, universityId },
       data: {
-        verified: isApproved,
-        verificationStatus: status,
-        verifiedAt: isApproved ? new Date() : null,
-        rejectionReason: isApproved ? null : reason,
+        verificationStatus: 'REJECTED',
+        verifiedAt: null,
+        rejectionReason: reason,
       },
       select: {
         id: true,

@@ -6,10 +6,49 @@ import { emailService } from '../email/email.service.js';
 import {
   userRepository,
   type VerificationFilters,
+  type AdminUserFilters,
 } from '../../repositories/user.repository.js';
 import { toPageMeta } from '../../utils/pagination.js';
 
 export const adminService = {
+  async listUsers(universityId: string, filters: AdminUserFilters) {
+    const [users, total] = await userRepository.listAdminUsers(universityId, filters);
+    return {
+      users,
+      meta: toPageMeta(filters.page, filters.limit, total),
+    };
+  },
+
+  async getUserDetail(userId: string, universityId: string) {
+    const detail = await userRepository.findUserDetailForAdmin(userId, universityId);
+    if (!detail) {
+      throw ApiError.notFound('User');
+    }
+    return detail;
+  },
+
+  async terminateUserSessions(input: { userId: string; universityId: string; actorId: string }) {
+    const target = await userRepository.findAuthenticatedById(input.userId);
+    if (!target || target.universityId !== input.universityId) {
+      throw ApiError.notFound('User');
+    }
+
+    await tokenRepository.revokeByUserId(input.userId);
+
+    await auditLogRepository.record({
+      universityId: input.universityId,
+      actorId: input.actorId,
+      action: 'user.sessions_terminated',
+      targetType: 'user',
+      targetId: input.userId,
+    });
+
+    return {
+      success: true,
+      message: 'All active sessions for this user have been terminated.',
+    };
+  },
+
   async listVerifications(universityId: string, filters: VerificationFilters) {
     const [users, total] = await userRepository.listVerifications(universityId, filters);
     return {
@@ -22,12 +61,19 @@ export const adminService = {
     userId: string;
     universityId: string;
     actorId: string;
-    status: 'APPROVED' | 'REJECTED';
+    status: 'APPROVED' | 'REJECTED' | 'REVOKED';
     reason?: string;
   }) {
     const target = await userRepository.findAuthenticatedById(input.userId);
     if (!target || target.universityId !== input.universityId) {
       throw ApiError.notFound('User');
+    }
+
+    // Unverified students or alumni cannot be accredited before email verification
+    if (input.status === 'APPROVED' && !target.verified) {
+      throw ApiError.badRequest(
+        'User must verify their email address before administrative accreditation approval.',
+      );
     }
 
     const reviewed = await userRepository.reviewVerification(
@@ -37,23 +83,32 @@ export const adminService = {
       input.reason,
     );
 
-    // If rejected, immediately invalidate active sessions for security
-    if (input.status === 'REJECTED') {
+    // If rejected or revoked, immediately invalidate active sessions for security
+    if (input.status === 'REJECTED' || input.status === 'REVOKED') {
       await tokenRepository.revokeByUserId(input.userId);
     }
 
     // Send decision email
-    await emailService.sendVerificationDecisionEmail(
-      target.email,
-      target.name,
-      input.status,
-      input.reason,
-    );
+    if (input.status === 'APPROVED' || input.status === 'REJECTED') {
+      await emailService.sendVerificationDecisionEmail(
+        target.email,
+        target.name,
+        input.status,
+        input.reason,
+      );
+    }
+
+    const auditAction =
+      input.status === 'APPROVED'
+        ? 'user.verified'
+        : input.status === 'REVOKED'
+          ? 'user.verification_revoked'
+          : 'user.verification_rejected';
 
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.actorId,
-      action: input.status === 'APPROVED' ? 'user.verified' : 'user.verification_rejected',
+      action: auditAction,
       targetType: 'user',
       targetId: input.userId,
       metadata: input.reason ? { reason: input.reason } : undefined,
@@ -260,7 +315,12 @@ export const adminService = {
     return { success: true, message: 'Invitation revoked.' };
   },
 
-  async toggleUserSuspension(input: { userId: string; isActive: boolean; actorId: string }) {
+  async toggleUserSuspension(input: {
+    userId: string;
+    isActive: boolean;
+    reason?: string;
+    actorId: string;
+  }) {
     const { prisma } = await import('../../config/database.js');
     if (input.userId === input.actorId) {
       throw ApiError.badRequest('You cannot suspend or deactivate your own Super Admin account.');
@@ -298,6 +358,7 @@ export const adminService = {
       action: input.isActive ? 'user.restored' : 'user.suspended',
       targetType: 'user',
       targetId: input.userId,
+      metadata: input.reason ? { reason: input.reason } : undefined,
     });
 
     return updated;

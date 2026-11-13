@@ -6,18 +6,30 @@ export const userIdParamSchema = z.object({
 
 export const reviewVerificationSchema = z
   .object({
-    status: z.enum(['APPROVED', 'REJECTED']),
+    status: z.enum(['APPROVED', 'REJECTED', 'REVOKED']),
     reason: z.string().trim().max(500).optional(),
   })
   .superRefine((data, context) => {
-    if (data.status === 'REJECTED' && (!data.reason || data.reason.trim().length < 3)) {
+    if (
+      (data.status === 'REJECTED' || data.status === 'REVOKED') &&
+      (!data.reason || data.reason.trim().length < 3)
+    ) {
       context.addIssue({
         code: 'custom',
         path: ['reason'],
-        message: 'A rejection reason of at least 3 characters is required.',
+        message: `A reason of at least 3 characters is required to ${data.status.toLowerCase()} accreditation.`,
       });
     }
   });
+
+export const adminUsersQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  role: z.enum(['STUDENT', 'ALUMNI', 'MODERATOR', 'SUPER_ADMIN']).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
+  verificationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+  search: z.string().trim().optional(),
+});
 
 export const verificationQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -37,6 +49,7 @@ export const invitationIdParamSchema = z.object({
 
 export const toggleSuspensionSchema = z.object({
   isActive: z.boolean(),
+  reason: z.string().trim().max(500).optional(),
 });
 
 export const auditLogQuerySchema = z.object({

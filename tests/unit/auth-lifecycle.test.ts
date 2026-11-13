@@ -314,6 +314,7 @@ describe('Authentication & Role Lifecycle Unit Tests', () => {
       } as any);
 
       vi.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
+      vi.spyOn(prisma.role, 'findUniqueOrThrow').mockResolvedValue({ id: 'role-mod-id', name: 'MODERATOR' } as any);
       vi.spyOn(passwordService, 'hash').mockResolvedValue('hashed-mod-pw');
 
       const createdModUser = {

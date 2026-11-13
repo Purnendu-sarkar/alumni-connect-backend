@@ -5,11 +5,11 @@ const booleanFromEnv = z.enum(['true', 'false']).transform((value) => value === 
 
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(5000),
+  PORT: z.coerce.number().int().min(1).max(65535).default(5001),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATABASE_URL: z.url(),
   DIRECT_URL: z.url(),
-  CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  CORS_ORIGINS: z.string().default('http://localhost:3001'),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
@@ -35,7 +35,7 @@ const environmentSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default('AlumniConnect <noreply@alumniconnect.internal>'),
-  APP_FRONTEND_URL: z.string().default('http://localhost:3000'),
+  APP_FRONTEND_URL: z.string().default('http://localhost:3001'),
 }).refine(
   (data) => !(data.NODE_ENV === 'production' && data.DEMO_ENABLED),
   {

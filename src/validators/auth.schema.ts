@@ -20,7 +20,8 @@ export const registerSchema = z
       .trim()
       .min(2)
       .max(80)
-      .regex(/^[a-z0-9-]+$/, 'University code may only contain lowercase letters, numbers, and hyphens.'),
+      .regex(/^[a-z0-9-]+$/, 'University code may only contain lowercase letters, numbers, and hyphens.')
+      .optional(),
     role: z.enum(['STUDENT', 'ALUMNI']),
     batch: z.string().trim().min(1, 'Batch / graduation year is required.').max(100),
     department: z.string().trim().min(1, 'Department is required.').max(100),
@@ -47,6 +48,12 @@ export const registerSchema = z
     }
     if (!data.department || !data.department.trim()) {
       context.addIssue({ code: 'custom', path: ['department'], message: 'Department is required.' });
+    }
+    if (data.role === 'STUDENT' && (!data.studentId || !data.studentId.trim())) {
+      context.addIssue({ code: 'custom', path: ['studentId'], message: 'University Student ID is required.' });
+    }
+    if (data.role === 'ALUMNI' && (!data.academicId || !data.academicId.trim())) {
+      context.addIssue({ code: 'custom', path: ['academicId'], message: 'Academic / Student ID is required.' });
     }
   });
 

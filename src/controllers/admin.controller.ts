@@ -1,13 +1,44 @@
 import { adminService } from '../services/admin/admin.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { sendSuccess } from '../utils/api-response.js';
-import type { reviewVerificationSchema, verificationQuerySchema } from '../validators/admin.schema.js';
+import type {
+  adminUsersQuerySchema,
+  reviewVerificationSchema,
+  verificationQuerySchema,
+} from '../validators/admin.schema.js';
 import type { z } from 'zod';
 
+type AdminUsersQuery = z.infer<typeof adminUsersQuerySchema>;
 type VerificationQuery = z.infer<typeof verificationQuerySchema>;
 type ReviewVerificationInput = z.infer<typeof reviewVerificationSchema>;
 
 export const adminController = {
+  listUsers: asyncHandler(async (request, response) => {
+    const query = request.query as unknown as AdminUsersQuery;
+    const result = await adminService.listUsers(request.auth!.universityId, query);
+    return sendSuccess(response, {
+      data: result.users,
+      meta: result.meta,
+    });
+  }),
+
+  getUserDetail: asyncHandler(async (request, response) => {
+    const user = await adminService.getUserDetail(
+      request.params.userId as string,
+      request.auth!.universityId,
+    );
+    return sendSuccess(response, { data: user });
+  }),
+
+  terminateUserSessions: asyncHandler(async (request, response) => {
+    const result = await adminService.terminateUserSessions({
+      userId: request.params.userId as string,
+      universityId: request.auth!.universityId,
+      actorId: request.auth!.userId,
+    });
+    return sendSuccess(response, { message: result.message });
+  }),
+
   listVerifications: asyncHandler(async (request, response) => {
     const query = request.query as unknown as VerificationQuery;
     const result = await adminService.listVerifications(request.auth!.universityId, query);
@@ -26,8 +57,14 @@ export const adminController = {
       status: body.status,
       reason: body.reason,
     });
+    const message =
+      body.status === 'APPROVED'
+        ? 'User verification approved.'
+        : body.status === 'REVOKED'
+          ? 'User accreditation revoked.'
+          : 'User verification rejected.';
     return sendSuccess(response, {
-      message: body.status === 'APPROVED' ? 'User verification approved.' : 'User verification rejected.',
+      message,
       data: user,
     });
   }),
@@ -129,10 +166,11 @@ export const adminController = {
   }),
 
   toggleUserSuspension: asyncHandler(async (request, response) => {
-    const { isActive } = request.body as { isActive: boolean };
+    const { isActive, reason } = request.body as { isActive: boolean; reason?: string };
     const user = await adminService.toggleUserSuspension({
       userId: request.params.userId as string,
       isActive: Boolean(isActive),
+      reason,
       actorId: request.auth!.userId,
     });
     return sendSuccess(response, {
