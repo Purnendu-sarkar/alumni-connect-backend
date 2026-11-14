@@ -85,6 +85,7 @@ export class DemoService {
         verified: true,
         verificationStatus: VerificationStatus.APPROVED,
         isDemo: true,
+        isMentorshipAvailable: false,
       },
       create: {
         email: 'demo.student@demo.edu',
@@ -104,6 +105,7 @@ export class DemoService {
         verificationStatus: VerificationStatus.APPROVED,
         onboardingCompleted: true,
         isDemo: true,
+        isMentorshipAvailable: false,
       },
     });
     userRecords[RoleName.STUDENT] = studentUser.id;
@@ -118,6 +120,7 @@ export class DemoService {
         verified: true,
         verificationStatus: VerificationStatus.APPROVED,
         isDemo: true,
+        isMentorshipAvailable: true,
       },
       create: {
         email: 'demo.alumni@demo.edu',
@@ -140,6 +143,7 @@ export class DemoService {
         verificationStatus: VerificationStatus.APPROVED,
         onboardingCompleted: true,
         isDemo: true,
+        isMentorshipAvailable: true,
       },
     });
     userRecords[RoleName.ALUMNI] = alumniUser.id;
@@ -302,10 +306,15 @@ export class DemoService {
    * Resolves a demo user by requested role.
    */
   async findDemoUserByRole(role: RoleName) {
+    const roleInfo = DEMO_ROLES_INFO.find((r) => r.role === role);
+    const targetEmail = roleInfo?.email;
+
     return prisma.user.findFirst({
       where: {
-        role: { name: role },
+        ...(targetEmail ? { email: targetEmail } : { role: { name: role } }),
         isDemo: true,
+        verified: true,
+        isActive: true,
       },
       include: {
         role: {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 
+import { env } from '../config/index.js';
 import { authController } from '../controllers/auth.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
@@ -15,9 +16,11 @@ import {
   verifyEmailSchema,
 } from '../validators/auth.schema.js';
 
+const isProd = env.NODE_ENV === 'production';
+
 const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1_000,
-  limit: 20,
+  limit: isProd ? 20 : 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many authentication attempts. Try again later.' },
@@ -25,7 +28,7 @@ const authRateLimit = rateLimit({
 
 const refreshRateLimit = rateLimit({
   windowMs: 15 * 60 * 1_000,
-  limit: 30,
+  limit: isProd ? 60 : 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many session refresh attempts. Try again later.' },

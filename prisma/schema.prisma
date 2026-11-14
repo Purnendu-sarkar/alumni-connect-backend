@@ -120,6 +120,7 @@ model User {
   rejectionReason     String?
   verifiedAt          DateTime?
   onboardingCompleted Boolean             @default(false)
+  isMentorshipAvailable Boolean           @default(false)
   isActive            Boolean             @default(true)
   isDemo              Boolean             @default(false)
   needPasswordChange  Boolean             @default(false)

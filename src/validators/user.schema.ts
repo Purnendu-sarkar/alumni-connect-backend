@@ -43,6 +43,7 @@ export const updateProfileSchema = z.object({
   skills: z.array(z.string().trim().min(1).max(50)).max(30).optional(),
   interests: z.array(z.string().trim().min(1).max(50)).max(30).optional(),
   onboardingCompleted: z.boolean().optional(),
+  isMentorshipAvailable: z.boolean().optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

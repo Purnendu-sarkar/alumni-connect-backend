@@ -30,13 +30,18 @@ async function startServer() {
     await bootstrapService.initialize();
 
     // Step 3: Initialize development demo fixtures if enabled
+    let demoStatus: 'INITIALIZED' | 'FAILED' | 'DISABLED' = 'DISABLED';
     if (env.DEMO_ENABLED && env.NODE_ENV !== 'production') {
       try {
         const { initializeDevDemo } = await import('./dev/index.js');
         await initializeDevDemo();
+        demoStatus = 'INITIALIZED';
       } catch (err) {
-        logger.warn(err, '[DEMO] Development demo module initialization skipped or not bundled.');
+        demoStatus = 'FAILED';
+        logger.error(err, '[DEMO] Development demo fixture initialization FAILED with error.');
       }
+    } else {
+      logger.info('[DEMO] Development demo module is disabled (DEMO_ENABLED=false or production mode).');
     }
 
     // Step 4: Begin listening for incoming HTTP requests
@@ -45,8 +50,9 @@ async function startServer() {
         logger.info('[SERVER] API server started successfully.');
         logger.info(`[SERVER] Base URL: http://localhost:${env.PORT}`);
         logger.info(`[SERVER] API Base: http://localhost:${env.PORT}/api/v1`);
+        logger.info(`[SERVER] Demo Module Status: ${demoStatus}`);
         console.log('\n==================================================');
-        console.log('                 SERVER READY');
+        console.log(`       SERVER READY (Demo: ${demoStatus})`);
         console.log('==================================================\n');
       } else {
         logger.info({ port: env.PORT, environment: env.NODE_ENV }, 'AlumniConnect API is listening');

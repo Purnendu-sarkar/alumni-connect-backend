@@ -6,27 +6,71 @@ import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
 import type { UpdateProfileInput } from '../../validators/user.schema.js';
 
-function computeProfileCompletion(profile: NonNullable<Awaited<ReturnType<typeof userRepository.findFullProfileById>>>) {
+interface ProfileMetrics {
+  completionPercentage: number;
+  onboardingCompleted: boolean;
+  missingRequiredFields: string[];
+}
+
+function calculateProfileMetrics(profile: NonNullable<Awaited<ReturnType<typeof userRepository.findFullProfileById>>>): ProfileMetrics {
   const role = profile.role.name;
-  const commonFields = [
-    Boolean(profile.name),
-    Boolean(profile.department),
-    Boolean(profile.batch),
-    Boolean(profile.bio),
-    Boolean(profile.avatarUrl),
+  const missingRequiredFields: string[] = [];
+
+  const check = (fieldName: string, value: unknown) => {
+    if (!value || (typeof value === 'string' && !value.trim())) {
+      missingRequiredFields.push(fieldName);
+      return false;
+    }
+    return true;
+  };
+
+  let requiredChecks: boolean[] = [];
+
+  if (role === 'STUDENT') {
+    requiredChecks = [
+      check('Full Name', profile.name),
+      check('Email Address', profile.email),
+      check('Student ID', profile.studentId),
+      check('Department', profile.department),
+      check('Batch', profile.batch),
+    ];
+  } else if (role === 'ALUMNI') {
+    requiredChecks = [
+      check('Full Name', profile.name),
+      check('Email Address', profile.email),
+      check('Department', profile.department),
+      check('Graduation Year', profile.graduationYear || profile.batch),
+      check('Academic ID', profile.academicId),
+    ];
+  } else {
+    requiredChecks = [
+      check('Full Name', profile.name),
+      check('Email Address', profile.email),
+    ];
+  }
+
+  // Optional/rich fields for completion bonus (up to 100%)
+  const optionalChecks = [
+    Boolean(profile.bio?.trim()),
     Boolean(profile.skills?.length),
+    Boolean(profile.avatarUrl?.trim()),
+    Boolean(profile.linkedinUrl?.trim()),
+    ...(role === 'ALUMNI' ? [Boolean(profile.currentCompany?.trim() || profile.position?.trim())] : []),
   ];
 
-  const roleFields =
-    role === 'STUDENT'
-      ? [Boolean(profile.studentId), Boolean(profile.currentSemester), Boolean(profile.interests?.length)]
-      : role === 'ALUMNI'
-      ? [Boolean(profile.employmentStatus || profile.currentCompany), Boolean(profile.headline), Boolean(profile.linkedinUrl)]
-      : [Boolean(profile.headline), Boolean(profile.bio)];
+  const requiredFilled = requiredChecks.filter(Boolean).length;
+  const optionalFilled = optionalChecks.filter(Boolean).length;
 
-  const totalFields = [...commonFields, ...roleFields];
-  const filledCount = totalFields.filter(Boolean).length;
-  return Math.round((filledCount / totalFields.length) * 100);
+  const requiredScore = Math.round((requiredFilled / requiredChecks.length) * 70);
+  const optionalScore = Math.round((optionalFilled / optionalChecks.length) * 30);
+  const completionPercentage = Math.min(100, requiredScore + optionalScore);
+  const onboardingCompleted = requiredChecks.every(Boolean);
+
+  return {
+    completionPercentage,
+    onboardingCompleted,
+    missingRequiredFields,
+  };
 }
 
 export const userService = {
@@ -34,8 +78,8 @@ export const userService = {
     const profile = await userRepository.findFullProfileById(userId);
     if (!profile) throw ApiError.unauthorized('Profile not found.');
 
-    const completionPercentage = computeProfileCompletion(profile);
-    return { ...profile, completionPercentage };
+    const metrics = calculateProfileMetrics(profile);
+    return { ...profile, ...metrics };
   },
 
   async updateMe(userId: string, universityId: string, input: UpdateProfileInput) {
@@ -80,6 +124,7 @@ export const userService = {
       if (input.employmentStatus !== undefined) data.employmentStatus = input.employmentStatus;
       if (input.currentCompany !== undefined) data.currentCompany = input.currentCompany;
       if (input.position !== undefined) data.position = input.position;
+      if (input.isMentorshipAvailable !== undefined) data.isMentorshipAvailable = input.isMentorshipAvailable;
     }
 
     // If previously rejected and user corrected academic info, reset verification to PENDING
@@ -102,10 +147,17 @@ export const userService = {
       });
     }
 
-    const updated = await userRepository.updateProfile(userId, universityId, data);
-    const completionPercentage = computeProfileCompletion(updated);
+    // Auto-update onboardingCompleted if all mandatory fields are satisfied
+    const simulatedProfile = { ...current, ...data };
+    const simulatedMetrics = calculateProfileMetrics(simulatedProfile as any);
+    if (data.onboardingCompleted === undefined && simulatedMetrics.onboardingCompleted && !current.onboardingCompleted) {
+      data.onboardingCompleted = true;
+    }
 
-    return { ...updated, completionPercentage };
+    const updated = await userRepository.updateProfile(userId, universityId, data);
+    const metrics = calculateProfileMetrics(updated);
+
+    return { ...updated, ...metrics };
   },
 
   async uploadAvatar(userId: string, universityId: string, filename: string) {

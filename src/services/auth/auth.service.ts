@@ -43,6 +43,8 @@ function toSafeUser(user: AuthenticatedUserRecord) {
     verificationStatus: user.verificationStatus,
     rejectionReason: user.rejectionReason,
     needPasswordChange: user.needPasswordChange ?? false,
+    onboardingCompleted: user.onboardingCompleted ?? false,
+    isMentorshipAvailable: user.isMentorshipAvailable ?? false,
     avatarUrl: user.avatarUrl,
     department: user.department,
     batch: user.batch,

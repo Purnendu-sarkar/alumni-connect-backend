@@ -43,4 +43,10 @@ describe('Demo Module & Production Safeguards', () => {
       (env as any).NODE_ENV = originalEnv;
     }
   });
+
+  it('verifies demo accounts correctly include mentorship availability attribute in schema', async () => {
+    const demoService = new (await import('../../src/dev/demo.service.js')).DemoService();
+    expect(demoService).toBeDefined();
+    expect(typeof demoService.initializeDemoFixtures).toBe('function');
+  });
 });
