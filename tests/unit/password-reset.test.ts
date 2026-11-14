@@ -64,9 +64,10 @@ describe('PasswordResetService', () => {
         type: 'PASSWORD_RESET',
         consumedAt: null,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 mins from now
-        user: { id: 'user-1', email: 'user@test.edu', universityId: 'uni-1', isActive: true },
+        user: { id: 'user-1', email: 'user@test.edu', universityId: 'uni-1', isActive: true, passwordHash: 'old-hash' },
       } as any);
 
+      vi.spyOn(passwordService, 'verify').mockResolvedValue(false);
       vi.spyOn(passwordService, 'hash').mockResolvedValue('new-argon2-hash');
       vi.spyOn(tokenRepository, 'revokeByUserId').mockResolvedValue({ count: 2 } as any);
       vi.spyOn(auditLogRepository, 'record').mockResolvedValue({} as any);
@@ -84,7 +85,7 @@ describe('PasswordResetService', () => {
       expect(mockTx.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'user-1' },
-          data: { passwordHash: 'new-argon2-hash' },
+          data: { passwordHash: 'new-argon2-hash', needPasswordChange: false },
         }),
       );
       expect(mockTx.verificationToken.update).toHaveBeenCalledWith(
@@ -94,6 +95,26 @@ describe('PasswordResetService', () => {
         }),
       );
       expect(tokenRepository.revokeByUserId).toHaveBeenCalledWith('user-1');
+    });
+
+    it('rejects if new password is identical to current password (reuse prevention)', async () => {
+      const plainToken = 'valid-token-reuse-check';
+      const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+
+      vi.spyOn(prisma.verificationToken, 'findUnique').mockResolvedValue({
+        id: 'tok-reuse',
+        tokenHash,
+        type: 'PASSWORD_RESET',
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        user: { id: 'user-1', email: 'user@test.edu', universityId: 'uni-1', isActive: true, passwordHash: 'existing-hash' },
+      } as any);
+
+      vi.spyOn(passwordService, 'verify').mockResolvedValue(true);
+
+      await expect(passwordResetService.resetPassword(plainToken, 'SameExistingPass123!#')).rejects.toThrow(
+        /New password cannot be the same as your current password/,
+      );
     });
 
     it('rejects if token was already consumed (single-use enforcement)', async () => {

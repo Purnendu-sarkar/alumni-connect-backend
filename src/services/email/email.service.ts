@@ -317,6 +317,72 @@ class EmailService {
     return { success: true, deliveredViaSmtp };
   }
 
+  async sendSecurityAlertEmail(
+    to: string,
+    name: string,
+    alertType: 'PASSWORD_RESET' | 'PASSWORD_CHANGED',
+  ): Promise<{ success: boolean; deliveredViaSmtp: boolean }> {
+    const subject =
+      alertType === 'PASSWORD_RESET'
+        ? 'Security Notice: Your AlumniConnect Password Was Reset'
+        : 'Security Notice: Your AlumniConnect Password Was Changed';
+    const actionDesc =
+      alertType === 'PASSWORD_RESET'
+        ? 'Your account password has been successfully reset using a single-use verification link.'
+        : 'Your account password has been updated from within your profile security settings.';
+    const text = `Hello ${name},\n\n${actionDesc}\nAll active sessions across other devices have been revoked for your security.\nIf you did not perform this change, please contact your university system administrator immediately.\n\n${env.APP_FRONTEND_URL}/login`;
+    const html = `
+      <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e5; border-radius: 8px;">
+        <h2 style="color: #0f172a; margin-top: 0;">Security Alert: Password Updated</h2>
+        <p>Hello <strong>${name}</strong>,</p>
+        <p>${actionDesc}</p>
+        <p style="padding: 12px; background: #f8fafc; border-left: 4px solid #2563eb; color: #334155;">
+          <strong>Security Action Taken:</strong> All previous refresh tokens and active sessions have been automatically terminated.
+        </p>
+        <p style="margin: 24px 0;">
+          <a href="${env.APP_FRONTEND_URL}/login" style="background-color: #2563eb; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
+            Sign In with New Password
+          </a>
+        </p>
+        <p style="font-size: 0.75rem; color: #64748b;">
+          If you did not authorize this change, please contact your campus administrator immediately to secure your credentials.
+        </p>
+      </div>
+    `;
+
+    let deliveredViaSmtp = false;
+    if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from: env.SMTP_FROM,
+          to,
+          subject,
+          text,
+          html,
+        });
+        deliveredViaSmtp = true;
+      } catch (err) {
+        logger.warn({ to, err }, 'SMTP delivery failed for security alert email.');
+      }
+    }
+
+    const emailRecord: CapturedEmail = {
+      id: `email-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      to,
+      subject,
+      html,
+      text,
+      timestamp: new Date(),
+      deliveredViaSmtp,
+    };
+    this.capturedEmails.unshift(emailRecord);
+    if (this.capturedEmails.length > this.maxCaptured) {
+      this.capturedEmails.pop();
+    }
+
+    return { success: true, deliveredViaSmtp };
+  }
+
   getCapturedEmails(): CapturedEmail[] {
     return this.capturedEmails;
   }

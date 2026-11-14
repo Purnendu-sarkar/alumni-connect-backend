@@ -24,7 +24,7 @@ function calculateProfileMetrics(profile: NonNullable<Awaited<ReturnType<typeof 
     return true;
   };
 
-  let requiredChecks: boolean[] = [];
+  let requiredChecks: boolean[];
 
   if (role === 'STUDENT') {
     requiredChecks = [
@@ -149,7 +149,7 @@ export const userService = {
 
     // Auto-update onboardingCompleted if all mandatory fields are satisfied
     const simulatedProfile = { ...current, ...data };
-    const simulatedMetrics = calculateProfileMetrics(simulatedProfile as any);
+    const simulatedMetrics = calculateProfileMetrics(simulatedProfile as unknown as Parameters<typeof calculateProfileMetrics>[0]);
     if (data.onboardingCompleted === undefined && simulatedMetrics.onboardingCompleted && !current.onboardingCompleted) {
       data.onboardingCompleted = true;
     }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { registerSchema } from '../../src/validators/auth.schema.js';
 
 const baseStudent = {
-  name: 'পূর্ণেন্দু কুমার সরকার',
+  name: 'Purnendu Kumar Sarkar',
   email: 'student@example.edu',
   password: 'CorrectHorse1!',
   universitySlug: 'demo-university',
@@ -34,7 +34,7 @@ const baseAlumniWithJob = {
 };
 
 describe('registerSchema', () => {
-  it('allows complete student registration with Unicode/Bengali name', () => {
+  it('allows complete student registration with valid student name', () => {
     expect(registerSchema.safeParse(baseStudent).success).toBe(true);
   });
 

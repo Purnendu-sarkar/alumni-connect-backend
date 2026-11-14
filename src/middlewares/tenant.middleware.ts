@@ -8,21 +8,16 @@ import { asyncHandler } from '../utils/async-handler.js';
 export const resolveTenant: RequestHandler = asyncHandler(async (request, _response, next) => {
   if (request.tenant) return next();
 
-  const domain = request.header('x-tenant-domain')?.trim().toLowerCase();
-  let university = domain ? await universityRepository.findByDomain(domain) : null;
-
-  if (!university) {
-    const { prisma } = await import('../config/database.js');
-    university = await prisma.university.findFirst({ where: { isActive: true } });
+  const university = await universityRepository.findCanonical();
+  if (!university || !university.isActive) {
+    throw ApiError.notFound('Active university institution');
   }
-
-  if (!university || !university.isActive) throw ApiError.notFound('Active university institution');
 
   request.tenant = { id: university.id, slug: university.slug, domain: university.domain };
   next();
 });
 
 export const requireTenant: RequestHandler = (request, _response, next) => {
-  if (!request.tenant) return next(ApiError.badRequest('A tenant context is required.'));
+  if (!request.tenant) return next(ApiError.badRequest('University institution context is required.'));
   return next();
 };

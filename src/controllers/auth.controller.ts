@@ -43,12 +43,21 @@ export const authController = {
   }),
 
   refresh: asyncHandler(async (request, response) => {
-    const session = await authService.refresh(request.cookies.refreshToken as string | undefined);
-    writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
-    return sendSuccess(response, {
-      message: 'Session refreshed.',
-      data: { accessToken: session.accessToken, user: session.user },
-    });
+    try {
+      const session = await authService.refresh(request.cookies.refreshToken as string | undefined, {
+        ip: request.ip,
+        userAgent: request.get('user-agent'),
+      });
+      writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
+      return sendSuccess(response, {
+        message: 'Session refreshed.',
+        data: { accessToken: session.accessToken, user: session.user },
+      });
+    } catch (error) {
+      response.clearCookie('refreshToken', refreshCookieOptions);
+      response.clearCookie('refreshToken', { ...refreshCookieOptions, path: '/' });
+      throw error;
+    }
   }),
 
   logout: asyncHandler(async (request, response) => {
@@ -89,7 +98,10 @@ export const authController = {
       request.auth!.userId,
       currentPassword,
       newPassword,
+      { ip: request.ip, userAgent: request.get('user-agent') },
     );
+    response.clearCookie('refreshToken', refreshCookieOptions);
+    response.clearCookie('refreshToken', { ...refreshCookieOptions, path: '/' });
     return sendSuccess(response, { message: result.message });
   }),
 
@@ -128,15 +140,8 @@ export const authController = {
         message: 'If an account exists with that email, a verification link has been dispatched.',
       });
     }
-    const { prisma } = await import('../config/database.js');
-    const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-    if (!user || user.verified) {
-      return sendSuccess(response, {
-        message: 'If an account exists with that email, a verification link has been dispatched.',
-      });
-    }
     const { passwordResetService } = await import('../services/auth/password-reset.service.js');
-    const result = await passwordResetService.requestEmailVerification(user.id);
+    const result = await passwordResetService.resendEmailVerification(email);
     return sendSuccess(response, {
       message: 'If an account exists with that email, a verification link has been dispatched.',
       data: result,

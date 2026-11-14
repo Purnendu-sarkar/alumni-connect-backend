@@ -173,18 +173,21 @@ model Permission {
 }
 
 model RefreshToken {
-  id           String     @id
-  tokenHash    String     @unique
-  userId       String
-  universityId String
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  createdAt    DateTime   @default(now())
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  id                  String     @id
+  tokenHash           String     @unique
+  familyId            String?
+  replacedByTokenHash String?
+  userId              String
+  universityId        String
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  createdAt           DateTime   @default(now())
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  university          University @relation(fields: [universityId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
   @@index([universityId])
+  @@index([familyId])
 }
 
 model Connection {

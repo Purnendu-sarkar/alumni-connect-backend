@@ -400,6 +400,7 @@ export const userRepository = {
       take: 20,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, ...safeUser } = user;
     return {
       ...safeUser,

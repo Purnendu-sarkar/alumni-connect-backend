@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/index.js';
+import { logger } from '../../config/logger.js';
 import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { tokenRepository } from '../../repositories/token.repository.js';
@@ -76,7 +77,7 @@ export const passwordResetService = {
       where: { tokenHash },
       include: {
         user: {
-          select: { id: true, email: true, universityId: true, isActive: true },
+          select: { id: true, name: true, email: true, universityId: true, isActive: true, passwordHash: true },
         },
       },
     });
@@ -97,13 +98,27 @@ export const passwordResetService = {
       throw ApiError.badRequest('Associated account is inactive or disabled.');
     }
 
+    if (tokenRecord.user.passwordHash) {
+      const isSamePassword = await passwordService.verify(tokenRecord.user.passwordHash, newPassword);
+      if (isSamePassword) {
+        throw new ApiError(
+          422,
+          'New password cannot be the same as your current password.',
+          'PASSWORD_REUSE_NOT_ALLOWED',
+        );
+      }
+    }
+
     const newPasswordHash = await passwordService.hash(newPassword);
 
     await prisma.$transaction(async (tx) => {
-      // 1. Update user password
+      // 1. Update user password and clear needPasswordChange
       await tx.user.update({
         where: { id: tokenRecord.user.id },
-        data: { passwordHash: newPasswordHash },
+        data: {
+          passwordHash: newPasswordHash,
+          needPasswordChange: false,
+        },
       });
 
       // 2. Mark token as consumed (single-use guarantee)
@@ -119,10 +134,15 @@ export const passwordResetService = {
       await auditLogRepository.record({
         universityId: tokenRecord.user.universityId,
         actorId: tokenRecord.user.id,
-        action: 'auth.password_reset',
+        action: 'PASSWORD_RESET_COMPLETED',
         targetType: 'user',
         targetId: tokenRecord.user.id,
       });
+    });
+
+    // Send asynchronous security alert email
+    emailService.sendSecurityAlertEmail(tokenRecord.user.email, tokenRecord.user.name, 'PASSWORD_RESET').catch((err) => {
+      logger.warn({ err }, 'Failed to dispatch security alert email after password reset.');
     });
 
     return {
@@ -170,6 +190,26 @@ export const passwordResetService = {
       deliveredViaSmtp: emailResult.deliveredViaSmtp,
       ...(env.NODE_ENV !== 'production' ? { debugToken: plainToken, verificationUrl: emailResult.verificationUrl } : {}),
     };
+  },
+
+  /**
+   * Safe public resend email verification method that prevents user enumeration.
+   */
+  async resendEmailVerification(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, verified: true, isActive: true },
+    });
+
+    if (!user || user.verified || !user.isActive) {
+      return {
+        success: true,
+        message: 'If an account exists with that email, a verification link has been dispatched.',
+      };
+    }
+
+    return this.requestEmailVerification(user.id);
   },
 
   /**

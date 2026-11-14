@@ -372,14 +372,22 @@ describe('Authentication & Role Lifecycle Unit Tests', () => {
     it('verifies current password, updates hash, resets needPasswordChange, and revokes sessions', async () => {
       vi.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-change-pw',
+        universityId: 'uni-1',
+        email: 'user@test.edu',
+        name: 'Test User',
         passwordHash: 'old-hash',
+        role: { name: 'STUDENT' },
       } as any);
 
-      vi.spyOn(passwordService, 'verify').mockResolvedValue(true);
+      vi.spyOn(passwordService, 'verify').mockImplementation(async (_hash, pass) => pass === 'OldPassword123!');
       vi.spyOn(passwordService, 'hash').mockResolvedValue('new-hash');
-      vi.spyOn(prisma.user, 'update').mockResolvedValue({ id: 'user-change-pw' } as any);
       vi.spyOn(tokenRepository, 'revokeByUserId').mockResolvedValue({ count: 2 } as any);
       vi.spyOn(auditLogRepository, 'record').mockResolvedValue({} as any);
+
+      const mockTx = {
+        user: { update: vi.fn().mockResolvedValue({ id: 'user-change-pw' }) },
+      };
+      vi.spyOn(prisma, '$transaction').mockImplementation(async (cb: any) => cb(mockTx));
 
       const result = await authService.changePassword(
         'user-change-pw',
@@ -388,7 +396,7 @@ describe('Authentication & Role Lifecycle Unit Tests', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(prisma.user.update).toHaveBeenCalledWith({
+      expect(mockTx.user.update).toHaveBeenCalledWith({
         where: { id: 'user-change-pw' },
         data: {
           passwordHash: 'new-hash',
@@ -401,14 +409,117 @@ describe('Authentication & Role Lifecycle Unit Tests', () => {
     it('rejects password change if current password does not match', async () => {
       vi.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-change-pw',
+        universityId: 'uni-1',
         passwordHash: 'old-hash',
+        role: { name: 'STUDENT' },
       } as any);
 
       vi.spyOn(passwordService, 'verify').mockResolvedValue(false);
+      vi.spyOn(auditLogRepository, 'record').mockResolvedValue({} as any);
 
       await expect(
         authService.changePassword('user-change-pw', 'WrongOldPassword!', 'NewPassword123!'),
       ).rejects.toThrow('Current password does not match records.');
+    });
+
+    it('rejects password change if new password is same as current password (reuse prevention)', async () => {
+      vi.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+        id: 'user-change-pw',
+        universityId: 'uni-1',
+        passwordHash: 'old-hash',
+        role: { name: 'STUDENT' },
+      } as any);
+
+      vi.spyOn(passwordService, 'verify').mockResolvedValue(true);
+
+      await expect(
+        authService.changePassword('user-change-pw', 'SamePass123!', 'SamePass123!'),
+      ).rejects.toThrow('New password cannot be the same as your current password.');
+    });
+  });
+
+  describe('Refresh Token Rotation & Family Reuse Detection', () => {
+    it('rotates refresh token keeping familyId when valid', async () => {
+      const mockUser = {
+        id: 'user-refresh-1',
+        email: 'user@test.edu',
+        universityId: 'uni-1',
+        isActive: true,
+        role: { name: 'STUDENT' },
+        university: { id: 'uni-1', name: 'Demo Uni', slug: 'demo', domain: 'demo.edu', isActive: true },
+      };
+
+      const plainRefreshToken = 'mock-refresh-token-valid';
+      vi.spyOn(tokenRepository, 'findById').mockResolvedValue({
+        id: 'tok-id-1',
+        tokenHash: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+        familyId: 'family-123',
+        userId: 'user-refresh-1',
+        universityId: 'uni-1',
+        expiresAt: new Date(Date.now() + 60000),
+        revokedAt: null,
+      } as any);
+
+      vi.spyOn(userRepository, 'findAuthenticatedById').mockResolvedValue(mockUser as any);
+      vi.spyOn(tokenRepository, 'create').mockResolvedValue({} as any);
+      vi.spyOn(tokenRepository, 'revoke').mockResolvedValue({ count: 1 } as any);
+
+      const { tokenService } = await import('../../src/services/auth/token.service.js');
+      vi.spyOn(tokenService, 'verifyRefreshToken').mockReturnValue({
+        sub: 'user-refresh-1',
+        universityId: 'uni-1',
+        role: 'STUDENT' as any,
+        tokenType: 'refresh',
+        jti: 'tok-id-1',
+      });
+      vi.spyOn(tokenService, 'hash').mockReturnValue('5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8');
+
+      const nextSession = await authService.refresh(plainRefreshToken);
+
+      expect(nextSession.accessToken).toBeDefined();
+      expect(nextSession.refreshToken).toBeDefined();
+      expect(tokenRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          familyId: 'family-123',
+        }),
+      );
+      expect(tokenRepository.revoke).toHaveBeenCalledWith('tok-id-1', expect.any(String));
+    });
+
+    it('detects refresh token reuse and revokes entire family', async () => {
+      const plainRefreshToken = 'mock-compromised-token';
+      vi.spyOn(tokenRepository, 'findById').mockResolvedValue({
+        id: 'tok-compromised-1',
+        tokenHash: 'some-hash',
+        familyId: 'compromised-family-999',
+        userId: 'user-victim',
+        universityId: 'uni-1',
+        expiresAt: new Date(Date.now() + 60000),
+        revokedAt: new Date(Date.now() - 10000), // ALREADY REVOKED!
+      } as any);
+
+      vi.spyOn(tokenRepository, 'revokeFamily').mockResolvedValue({ count: 3 } as any);
+      vi.spyOn(auditLogRepository, 'record').mockResolvedValue({} as any);
+
+      const { tokenService } = await import('../../src/services/auth/token.service.js');
+      vi.spyOn(tokenService, 'verifyRefreshToken').mockReturnValue({
+        sub: 'user-victim',
+        universityId: 'uni-1',
+        role: 'STUDENT' as any,
+        tokenType: 'refresh',
+        jti: 'tok-compromised-1',
+      });
+      vi.spyOn(tokenService, 'hash').mockReturnValue('some-hash');
+
+      await expect(authService.refresh(plainRefreshToken)).rejects.toThrow(
+        /Suspicious session reuse detected/,
+      );
+      expect(tokenRepository.revokeFamily).toHaveBeenCalledWith('compromised-family-999');
+      expect(auditLogRepository.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'SESSION_REUSE_DETECTED',
+        }),
+      );
     });
   });
 });

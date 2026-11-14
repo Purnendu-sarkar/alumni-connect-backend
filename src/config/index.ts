@@ -16,6 +16,7 @@ const environmentSchema = z.object({
   JWT_REFRESH_TTL: z.string().default('30d'),
   COOKIE_SECURE: booleanFromEnv.optional(),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
+  REDIS_URL: z.string().optional(),
 
   // Bootstrap Super Admin Configuration (server-only)
   BOOTSTRAP_SUPER_ADMIN_EMAIL: z.string().email().optional(),
