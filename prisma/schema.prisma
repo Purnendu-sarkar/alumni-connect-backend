@@ -20,17 +20,32 @@ enum VerificationStatus {
   REJECTED
 }
 
+enum PrivacyScope {
+  PUBLIC
+  ALL_MEMBERS
+  CONNECTIONS_ONLY
+  ONLY_ME
+}
+
 enum ConnectionStatus {
   PENDING
   ACCEPTED
   DECLINED
+  REJECTED
+  CANCELLED
+  BLOCKED
 }
 
 enum MentorshipStatus {
+  REQUESTED
+  CLARIFICATION_REQUESTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  REJECTED
   PENDING
   ACCEPTED
   DECLINED
-  COMPLETED
 }
 
 enum JobStatus {
@@ -160,11 +175,17 @@ model User {
   verifiedAt          DateTime?
   onboardingCompleted Boolean             @default(false)
   isMentorshipAvailable Boolean           @default(false)
+  mentorshipStatus    String              @default("CLOSED")
+  maxActiveMentees    Int                 @default(5)
+  mentorshipTopics    String[]            @default([])
   isActive            Boolean             @default(true)
   isDemo              Boolean             @default(false)
   needPasswordChange  Boolean             @default(false)
   university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
   role                Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  privacySetting      PrivacySetting?
+  blocksGiven         Block[]             @relation("BlocksGiven")
+  blocksReceived      Block[]             @relation("BlocksReceived")
   refreshTokens       RefreshToken[]
   verificationTokens  VerificationToken[]
   moderatorInvitationsSent ModeratorInvitation[] @relation("ModeratorInviter")
@@ -258,9 +279,12 @@ model Connection {
   universityId String
   requesterId String
   recipientId String
+  userLowId   String?
+  userHighId  String?
   status      ConnectionStatus @default(PENDING)
   message     String?
   respondedAt DateTime?
+  rejectedAt  DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   university  University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
@@ -268,26 +292,78 @@ model Connection {
   recipient   User             @relation("ConnectionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@unique([requesterId, recipientId])
+  @@index([universityId, userLowId, userHighId])
   @@index([universityId, status, createdAt])
   @@index([recipientId, status])
+  @@index([userLowId, userHighId])
 }
 
 model MentorshipRequest {
-  id           String           @id @default(cuid())
-  universityId String
-  mentorId     String
-  menteeId     String
-  goals        String
-  status       MentorshipStatus @default(PENDING)
-  scheduledAt  DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  university   University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  mentor       User             @relation("Mentor", fields: [mentorId], references: [id], onDelete: Cascade)
-  mentee       User             @relation("Mentee", fields: [menteeId], references: [id], onDelete: Cascade)
+  id                     String           @id @default(cuid())
+  universityId           String
+  mentorId               String
+  menteeId               String
+  topic                  String           @default("General Mentorship")
+  careerGoal             String           @default("Career Guidance")
+  message                String           @default("")
+  goals                  String           @default("")
+  preferredCommunication String           @default("CHAT")
+  availability           String           @default("Flexible")
+  expectedDuration       String?
+  status                 MentorshipStatus @default(REQUESTED)
+  clarificationQuestion  String?
+  clarificationReply     String?
+  alumniNote             String?
+  decisionNote           String?
+  scheduledAt            DateTime?
+  startedAt              DateTime?
+  endedAt                DateTime?
+  endedById              String?
+  endNote                String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  university             University       @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  mentor                 User             @relation("Mentor", fields: [mentorId], references: [id], onDelete: Cascade)
+  mentee                 User             @relation("Mentee", fields: [menteeId], references: [id], onDelete: Cascade)
 
   @@index([universityId, status])
   @@index([mentorId, status])
+  @@index([menteeId, status])
+}
+
+model PrivacySetting {
+  id                    String       @id @default(cuid())
+  userId                String       @unique
+  profileVisibility     PrivacyScope @default(ALL_MEMBERS)
+  emailVisibility       PrivacyScope @default(CONNECTIONS_ONLY)
+  phoneVisibility       PrivacyScope @default(ONLY_ME)
+  locationVisibility    PrivacyScope @default(ALL_MEMBERS)
+  careerVisibility      PrivacyScope @default(ALL_MEMBERS)
+  educationVisibility   PrivacyScope @default(ALL_MEMBERS)
+  skillsVisibility      PrivacyScope @default(ALL_MEMBERS)
+  connectionsVisibility PrivacyScope @default(ALL_MEMBERS)
+  mentorshipVisibility  PrivacyScope @default(ALL_MEMBERS)
+  searchVisibility      PrivacyScope @default(ALL_MEMBERS)
+  messagingPermission   PrivacyScope @default(ALL_MEMBERS)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  blocker   User     @relation("BlocksGiven", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }
 
 model Job {

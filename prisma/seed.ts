@@ -186,7 +186,42 @@ async function main() {
     }
   }
 
-  console.log(`Seeded ${university.name}; admin: ${seedAdminEmail!}; departments seeded across ${allUniversities.length} universities.`);
+  // Ensure all users have default PrivacySetting
+  const allUsers = await prisma.user.findMany({ select: { id: true, role: { select: { name: true } }, privacySetting: { select: { id: true } } } });
+  for (const u of allUsers) {
+    if (!u.privacySetting) {
+      await prisma.privacySetting.create({
+        data: {
+          userId: u.id,
+          profileVisibility: 'ALL_MEMBERS',
+          emailVisibility: 'CONNECTIONS_ONLY',
+          phoneVisibility: 'ONLY_ME',
+          locationVisibility: 'ALL_MEMBERS',
+          careerVisibility: 'ALL_MEMBERS',
+          educationVisibility: 'ALL_MEMBERS',
+          skillsVisibility: 'ALL_MEMBERS',
+          connectionsVisibility: 'ALL_MEMBERS',
+          mentorshipVisibility: 'ALL_MEMBERS',
+          searchVisibility: 'ALL_MEMBERS',
+          messagingPermission: 'ALL_MEMBERS',
+        },
+      });
+    }
+
+    if (u.role.name === RoleName.ALUMNI) {
+      await prisma.user.update({
+        where: { id: u.id },
+        data: {
+          isMentorshipAvailable: true,
+          mentorshipStatus: 'OPEN',
+          maxActiveMentees: 5,
+          mentorshipTopics: ['Career Guidance', 'System Design', 'Resume Review'],
+        },
+      });
+    }
+  }
+
+  console.log(`Seeded ${university.name}; admin: ${seedAdminEmail!}; departments seeded across ${allUniversities.length} universities; privacy settings ensured.`);
 }
 
 main()

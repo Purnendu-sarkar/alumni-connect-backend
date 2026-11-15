@@ -6,11 +6,15 @@ import { sendSuccess } from '../utils/api-response.js';
 import { adminRouter } from './admin.routes.js';
 import { alumniRouter } from './alumni.routes.js';
 import { authRouter } from './auth.routes.js';
+import { blockRouter } from './block.routes.js';
 import { connectionRouter } from './connection.routes.js';
 import { departmentRouter, adminDepartmentRouter } from './department.routes.js';
+import { directoryRouter } from './directory.routes.js';
 import { jobRouter } from './job.routes.js';
 import { mediaRouter } from './media.routes.js';
+import { mentorshipRouter, adminMentorshipRouter } from './mentorship.routes.js';
 import { notificationRouter } from './notification.routes.js';
+import { privacyRouter } from './privacy.routes.js';
 import { userRouter } from './user.routes.js';
 
 export const apiRouter = Router();
@@ -29,7 +33,12 @@ apiRouter.get(
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/users', userRouter);
 apiRouter.use('/alumni', alumniRouter);
+apiRouter.use('/directory', directoryRouter);
 apiRouter.use('/connections', connectionRouter);
+apiRouter.use('/blocks', blockRouter);
+apiRouter.use('/privacy', privacyRouter);
+apiRouter.use('/mentorship', mentorshipRouter);
+apiRouter.use('/admin/mentorship', adminMentorshipRouter);
 apiRouter.use('/departments', departmentRouter);
 apiRouter.use('/admin/departments', adminDepartmentRouter);
 apiRouter.use('/jobs', jobRouter);
