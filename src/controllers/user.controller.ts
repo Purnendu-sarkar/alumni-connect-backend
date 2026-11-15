@@ -25,13 +25,15 @@ export const userController = {
 
   uploadAvatar: asyncHandler(async (request, response) => {
     if (!request.file) {
-      throw ApiError.badRequest('Please upload an image file (JPEG, PNG, or WebP up to 2MB).');
+      throw ApiError.badRequest('Please upload an image file (JPEG, PNG, or WebP up to 5MB).');
     }
 
     const result = await userService.uploadAvatar(
       request.auth!.userId,
       request.auth!.universityId,
-      request.file.filename,
+      request.auth!.role,
+      request.file.buffer,
+      request.file.mimetype,
     );
 
     return sendSuccess(response, {

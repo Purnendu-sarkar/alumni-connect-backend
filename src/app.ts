@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { STATUS_CODES } from 'node:http';
 import express, { type RequestHandler, type Request, type Response } from 'express';
 import compression from 'compression';
@@ -89,8 +88,6 @@ app.get('/', (req: Request, res: Response) => {
     timeStamp: new Date().toUTCString(),
   });
 });
-
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
 app.use('/api/v1', apiRouter);
 app.use(notFoundMiddleware);

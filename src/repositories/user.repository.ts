@@ -124,6 +124,7 @@ export const userRepository = {
         skills: true,
         interests: true,
         avatarUrl: true,
+        avatarPublicId: true,
         verified: true,
         verificationStatus: true,
         rejectionReason: true,
@@ -169,6 +170,7 @@ export const userRepository = {
         skills: true,
         interests: true,
         avatarUrl: true,
+        avatarPublicId: true,
         verified: true,
         verificationStatus: true,
         rejectionReason: true,
@@ -202,6 +204,7 @@ export const userRepository = {
         skills: true,
         interests: true,
         avatarUrl: true,
+        avatarPublicId: true,
         verified: true,
         verificationStatus: true,
         graduationYear: true,
@@ -491,11 +494,11 @@ export const userRepository = {
     });
   },
 
-  updateAvatar(userId: string, universityId: string, avatarUrl: string | null) {
+  updateAvatar(userId: string, universityId: string, avatarUrl: string | null, avatarPublicId: string | null = null) {
     return prisma.user.update({
       where: { id: userId, universityId },
-      data: { avatarUrl },
-      select: { id: true, avatarUrl: true },
+      data: { avatarUrl, avatarPublicId },
+      select: { id: true, avatarUrl: true, avatarPublicId: true },
     });
   },
 };

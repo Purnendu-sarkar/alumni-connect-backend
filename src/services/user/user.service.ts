@@ -1,9 +1,7 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
 import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
+import { mediaService } from '../media/media.service.js';
 import type { UpdateProfileInput } from '../../validators/user.schema.js';
 
 interface ProfileMetrics {
@@ -160,47 +158,29 @@ export const userService = {
     return { ...updated, ...metrics };
   },
 
-  async uploadAvatar(userId: string, universityId: string, filename: string) {
-    const current = await userRepository.findFullProfileById(userId);
-    if (!current || current.universityId !== universityId) {
-      throw ApiError.unauthorized('Account unavailable.');
-    }
-
-    // Clean up old avatar if stored locally
-    if (current.avatarUrl?.startsWith('/uploads/avatars/')) {
-      const oldFilename = path.basename(current.avatarUrl);
-      const oldPath = path.resolve(process.cwd(), 'uploads', 'avatars', oldFilename);
-      try {
-        await fs.unlink(oldPath);
-      } catch {
-        // ignore missing file
-      }
-    }
-
-    const avatarUrl = `/uploads/avatars/${filename}`;
-    await userRepository.updateAvatar(userId, universityId, avatarUrl);
-
-    return { avatarUrl };
+  async uploadAvatar(
+    userId: string,
+    universityId: string,
+    role: string,
+    fileBuffer: Buffer,
+    mimeType: string,
+  ) {
+    const uploaded = await mediaService.uploadMediaStream(
+      userId,
+      universityId,
+      role,
+      fileBuffer,
+      mimeType,
+      'PROFILE_PHOTO',
+    );
+    return {
+      avatarUrl: uploaded.secureUrl,
+      avatarPublicId: uploaded.publicId,
+    };
   },
 
   async removeAvatar(userId: string, universityId: string) {
-    const current = await userRepository.findFullProfileById(userId);
-    if (!current || current.universityId !== universityId) {
-      throw ApiError.unauthorized('Account unavailable.');
-    }
-
-    if (current.avatarUrl?.startsWith('/uploads/avatars/')) {
-      const oldFilename = path.basename(current.avatarUrl);
-      const oldPath = path.resolve(process.cwd(), 'uploads', 'avatars', oldFilename);
-      try {
-        await fs.unlink(oldPath);
-      } catch {
-        // ignore missing file
-      }
-    }
-
-    await userRepository.updateAvatar(userId, universityId, null);
-    return { avatarUrl: null };
+    return mediaService.removeAvatar(userId, universityId);
   },
 
   async getAlumniById(

@@ -59,6 +59,14 @@ enum MediaType {
   DOCUMENT
 }
 
+enum UploadPurpose {
+  PROFILE_PHOTO
+  RESUME
+  STORY_MEDIA
+  EVENT_BANNER
+  ANNOUNCEMENT_ATTACHMENT
+}
+
 model University {
   id               String             @id @default(cuid())
   name             String
@@ -115,6 +123,7 @@ model User {
   skills              String[]            @default([])
   interests           String[]            @default([])
   avatarUrl           String?
+  avatarPublicId      String?
   verified            Boolean             @default(false)
   verificationStatus  VerificationStatus  @default(PENDING)
   rejectionReason     String?
@@ -140,6 +149,7 @@ model User {
   eventsCreated       Event[]             @relation("EventCreator")
   contentsCreated     Content[]           @relation("ContentCreator")
   mediaUploaded       MediaAsset[]        @relation("MediaUploader")
+  uploadedFiles       UploadedFile[]
   analyticsEvents     AnalyticsEvent[]
   auditLogs           AuditLog[]          @relation("AuditActor")
   createdAt           DateTime            @default(now())
@@ -277,6 +287,7 @@ model Event {
   startsAt     DateTime
   endsAt       DateTime?
   location     String?
+  bannerPublicId String?
   isPublished  Boolean    @default(false)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -296,6 +307,8 @@ model Content {
   title        String
   body         String
   slug         String
+  mediaPublicId String?
+  mediaType    MediaType?
   status       ContentStatus @default(DRAFT)
   metaTitle    String?
   metaDescription String?
@@ -420,4 +433,26 @@ model ModeratorInvitation {
   @@index([email])
   @@index([tokenHash])
 }
+
+model UploadedFile {
+  id          String        @id @default(cuid())
+  userId      String
+  purpose     UploadPurpose
+  mediaType   MediaType     @default(IMAGE)
+  publicId    String        @unique
+  url         String
+  secureUrl   String
+  format      String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  durationSec Float?
+  createdAt   DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("uploaded_files")
+}
+
 
