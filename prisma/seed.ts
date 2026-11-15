@@ -7,11 +7,20 @@ import { PERMISSIONS, rolePermissionMap } from '../src/constants/permissions.js'
 import { passwordService } from '../src/services/auth/password.service.js';
 
 const databaseUrl = process.env.DATABASE_URL;
-const seedAdminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
-const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+const seedAdminEmail = (
+  process.env.SEED_ADMIN_EMAIL ||
+  process.env.BOOTSTRAP_SUPER_ADMIN_EMAIL ||
+  'admin@example.edu'
+)
+  .trim()
+  .toLowerCase();
+const seedAdminPassword =
+  process.env.SEED_ADMIN_PASSWORD ||
+  process.env.BOOTSTRAP_SUPER_ADMIN_PASSWORD ||
+  'SuperAdminPass123!';
 
-if (!databaseUrl || !seedAdminEmail || !seedAdminPassword) {
-  throw new Error('DATABASE_URL, SEED_ADMIN_EMAIL, and SEED_ADMIN_PASSWORD are required.');
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required.');
 }
 
 const prisma = new PrismaClient({
@@ -52,9 +61,9 @@ async function main() {
   );
 
   const university = await prisma.university.upsert({
-    where: { domain: 'example.edu' },
-    update: { name: 'Demo University', slug: 'demo-university', isActive: true },
-    create: { name: 'Demo University', slug: 'demo-university', domain: 'example.edu' },
+    where: { slug: 'demo-university' },
+    update: { name: 'Demo University', isActive: true },
+    create: { name: 'Demo University', slug: 'demo-university', domain: 'demo.edu', isActive: true },
   });
 
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.SUPER_ADMIN } });
@@ -82,7 +91,102 @@ async function main() {
     },
   });
 
-  console.log(`Seeded ${university.name}; admin: ${seedAdminEmail!}`);
+  const CORE_DEPARTMENTS = [
+    {
+      name: 'Computer Science & Engineering',
+      code: 'CSE',
+      faculty: 'Faculty of Science & Engineering',
+      displayOrder: 1,
+      description: 'Department of Computer Science & Engineering',
+    },
+    {
+      name: 'Electrical & Electronic Engineering',
+      code: 'EEE',
+      faculty: 'Faculty of Science & Engineering',
+      displayOrder: 2,
+      description: 'Department of Electrical & Electronic Engineering',
+    },
+    {
+      name: 'Business Administration',
+      code: 'BBA',
+      faculty: 'Faculty of Business Studies',
+      displayOrder: 3,
+      description: 'School of Business & Entrepreneurship',
+    },
+    {
+      name: 'Economics',
+      code: 'ECON',
+      faculty: 'Faculty of Social Sciences',
+      displayOrder: 4,
+      description: 'Department of Economics & Development Policy',
+    },
+    {
+      name: 'English',
+      code: 'ENG',
+      faculty: 'Faculty of Arts & Humanities',
+      displayOrder: 5,
+      description: 'Department of English Language & Literature',
+    },
+    {
+      name: 'Civil Engineering',
+      code: 'CE',
+      faculty: 'Faculty of Science & Engineering',
+      displayOrder: 6,
+      description: 'Department of Civil & Environmental Engineering',
+    },
+  ];
+
+  const allUniversities = await prisma.university.findMany({ where: { isActive: true } });
+
+  for (const uni of allUniversities) {
+    const seededDepartments = await Promise.all(
+      CORE_DEPARTMENTS.map((dept) =>
+        prisma.department.upsert({
+          where: {
+            universityId_name: {
+              universityId: uni.id,
+              name: dept.name,
+            },
+          },
+          update: {
+            code: dept.code,
+            faculty: dept.faculty,
+            displayOrder: dept.displayOrder,
+            description: dept.description,
+            isActive: true,
+          },
+          create: {
+            universityId: uni.id,
+            name: dept.name,
+            code: dept.code,
+            faculty: dept.faculty,
+            displayOrder: dept.displayOrder,
+            description: dept.description,
+            isActive: true,
+          },
+        }),
+      ),
+    );
+
+    // Link any existing users whose department string matches seeded department name or code
+    for (const dept of seededDepartments) {
+      await prisma.user.updateMany({
+        where: {
+          universityId: uni.id,
+          OR: [
+            { department: { equals: dept.name, mode: 'insensitive' } },
+            { department: { equals: dept.code, mode: 'insensitive' } },
+          ],
+        },
+        data: {
+          departmentId: dept.id,
+          department: dept.name,
+        },
+      });
+    }
+  }
+
+  console.log(`Seeded ${university.name}; admin: ${seedAdminEmail!}; departments seeded across ${allUniversities.length} universities.`);
 }
 
 main()

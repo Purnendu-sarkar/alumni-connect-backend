@@ -29,6 +29,7 @@ export const adminUsersQuerySchema = z.object({
   status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
   verificationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
   search: z.string().trim().optional(),
+  department: z.string().trim().optional(),
 });
 
 export const verificationQuerySchema = z.object({

@@ -5,6 +5,7 @@ import { env } from '../../config/index.js';
 import { logger } from '../../config/logger.js';
 import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
+import { departmentRepository } from '../../repositories/department.repository.js';
 import { tokenRepository } from '../../repositories/token.repository.js';
 import { universityRepository } from '../../repositories/university.repository.js';
 import {
@@ -120,9 +121,25 @@ export const authService = {
       }
     }
 
+    let resolvedDepartmentId: string | undefined = undefined;
+    let resolvedDepartmentName: string | undefined = input.department?.trim();
+
+    if (input.department) {
+      const matchedDept = await departmentRepository.findActiveByIdOrNameOrCode(
+        university.id,
+        input.department,
+      );
+      if (matchedDept) {
+        resolvedDepartmentId = matchedDept.id;
+        resolvedDepartmentName = matchedDept.name;
+      }
+    }
+
     const passwordHash = await passwordService.hash(input.password);
     const user = await userRepository.create({
       ...input,
+      department: resolvedDepartmentName,
+      departmentId: resolvedDepartmentId,
       universityId: university.id,
       passwordHash,
     });

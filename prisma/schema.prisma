@@ -115,6 +115,7 @@ model University {
   adSlots          AdSlot[]
   analyticsEvents  AnalyticsEvent[]
   auditLogs        AuditLog[]
+  departments      Department[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
@@ -129,6 +130,8 @@ model User {
   email               String              @unique
   passwordHash        String
   batch               String?
+  departmentId        String?
+  departmentRef       Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   department          String?
   currentCompany      String?
   position            String?
@@ -188,6 +191,7 @@ model User {
   @@index([universityId, verificationStatus])
   @@index([universityId, roleId, verificationStatus])
   @@index([universityId, department, batch])
+  @@index([universityId, departmentId])
   @@index([universityId, currentCompany])
   @@index([isDemo])
   @@index([universityId, isDemo])
@@ -209,6 +213,26 @@ model Permission {
   description String?
   roles       Role[]
   createdAt   DateTime @default(now())
+}
+
+model Department {
+  id           String     @id @default(cuid())
+  universityId String
+  name         String
+  code         String
+  faculty      String?
+  description  String?
+  displayOrder Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  users        User[]
+
+  @@unique([universityId, name])
+  @@unique([universityId, code])
+  @@index([universityId, isActive, displayOrder])
 }
 
 model RefreshToken {

@@ -1,5 +1,6 @@
 import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
+import { departmentRepository } from '../../repositories/department.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
 import { mediaService } from '../media/media.service.js';
 import { notificationService } from '../notification/notification.service.js';
@@ -102,7 +103,35 @@ export const userService = {
     if (input.linkedinUrl !== undefined) data.linkedinUrl = input.linkedinUrl;
     if (input.websiteUrl !== undefined) data.websiteUrl = input.websiteUrl;
     if (input.githubUrl !== undefined) data.githubUrl = input.githubUrl;
-    if (input.department !== undefined) data.department = input.department;
+    if (input.department !== undefined) {
+      if (!input.department || input.department.trim() === '') {
+        data.department = null;
+        data.departmentId = null;
+      } else {
+        const matchedDept = await departmentRepository.findActiveByIdOrNameOrCode(
+          universityId,
+          input.department,
+        );
+        if (matchedDept) {
+          data.departmentId = matchedDept.id;
+          data.department = matchedDept.name;
+        } else {
+          if (isStudent || isAlumni) {
+            const anyDept = await departmentRepository.findById(input.department, universityId);
+            if (anyDept) {
+              data.departmentId = anyDept.id;
+              data.department = anyDept.name;
+            } else {
+              data.department = input.department.trim();
+              data.departmentId = null;
+            }
+          } else {
+            data.department = input.department.trim();
+            data.departmentId = null;
+          }
+        }
+      }
+    }
     if (input.batch !== undefined) data.batch = input.batch;
     if (input.skills !== undefined) data.skills = input.skills;
     if (input.interests !== undefined) data.interests = input.interests;

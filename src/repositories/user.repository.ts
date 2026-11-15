@@ -29,6 +29,7 @@ export interface AdminUserFilters extends PaginationInput {
   status?: 'ACTIVE' | 'SUSPENDED';
   verificationStatus?: VerificationStatus;
   search?: string;
+  department?: string;
 }
 
 export const userRepository = {
@@ -51,6 +52,7 @@ export const userRepository = {
     passwordHash: string;
     batch?: string;
     department?: string;
+    departmentId?: string;
     studentId?: string;
     currentSemester?: string;
     admissionYear?: string;
@@ -74,6 +76,7 @@ export const userRepository = {
         passwordHash: input.passwordHash,
         batch: input.batch,
         department: input.department,
+        departmentId: input.departmentId,
         studentId: input.studentId,
         currentSemester: input.currentSemester,
         admissionYear: input.admissionYear,
@@ -103,6 +106,15 @@ export const userRepository = {
         name: true,
         email: true,
         department: true,
+        departmentId: true,
+        departmentRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            faculty: true,
+          },
+        },
         batch: true,
         studentId: true,
         currentSemester: true,
@@ -149,6 +161,15 @@ export const userRepository = {
         name: true,
         email: true,
         department: true,
+        departmentId: true,
+        departmentRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            faculty: true,
+          },
+        },
         batch: true,
         studentId: true,
         currentSemester: true,
@@ -193,6 +214,15 @@ export const userRepository = {
         name: true,
         batch: true,
         department: true,
+        departmentId: true,
+        departmentRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            faculty: true,
+          },
+        },
         currentCompany: true,
         position: true,
         bio: true,
@@ -224,7 +254,14 @@ export const userRepository = {
       role: { name: 'ALUMNI' },
       ...(filters.batch ? { batch: { equals: filters.batch, mode: 'insensitive' } } : {}),
       ...(filters.department
-        ? { department: { equals: filters.department, mode: 'insensitive' } }
+        ? {
+            OR: [
+              { departmentId: filters.department },
+              { department: { equals: filters.department, mode: 'insensitive' } },
+              { departmentRef: { code: { equals: filters.department, mode: 'insensitive' } } },
+              { departmentRef: { name: { equals: filters.department, mode: 'insensitive' } } },
+            ],
+          }
         : {}),
       ...(filters.company
         ? { currentCompany: { contains: filters.company, mode: 'insensitive' } }
@@ -239,6 +276,15 @@ export const userRepository = {
           name: true,
           batch: true,
           department: true,
+        departmentId: true,
+        departmentRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            faculty: true,
+          },
+        },
           currentCompany: true,
           position: true,
           bio: true,
@@ -285,6 +331,15 @@ export const userRepository = {
           email: true,
           batch: true,
           department: true,
+        departmentId: true,
+        departmentRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            faculty: true,
+          },
+        },
           studentId: true,
           academicId: true,
           currentSemester: true,
@@ -314,6 +369,16 @@ export const userRepository = {
       ...(filters.role ? { role: { name: filters.role } } : {}),
       ...(filters.status ? { isActive: filters.status === 'ACTIVE' } : {}),
       ...(filters.verificationStatus ? { verificationStatus: filters.verificationStatus } : {}),
+      ...(filters.department
+        ? {
+            OR: [
+              { departmentId: filters.department },
+              { department: { equals: filters.department, mode: 'insensitive' } },
+              { departmentRef: { code: { equals: filters.department, mode: 'insensitive' } } },
+              { departmentRef: { name: { equals: filters.department, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
       ...(filters.search
         ? {
             OR: [
@@ -339,6 +404,15 @@ export const userRepository = {
           email: true,
           batch: true,
           department: true,
+        departmentId: true,
+        departmentRef: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            faculty: true,
+          },
+        },
           studentId: true,
           academicId: true,
           currentSemester: true,
