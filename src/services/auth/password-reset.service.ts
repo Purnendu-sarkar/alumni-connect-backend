@@ -6,6 +6,7 @@ import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { tokenRepository } from '../../repositories/token.repository.js';
 import { emailService } from '../email/email.service.js';
+import { notificationService } from '../notification/notification.service.js';
 import { passwordService } from './password.service.js';
 
 export const passwordResetService = {
@@ -17,7 +18,7 @@ export const passwordResetService = {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, name: true, email: true, isActive: true },
+      select: { id: true, name: true, email: true, isActive: true, universityId: true },
     });
 
     if (!user || !user.isActive) {
@@ -53,6 +54,15 @@ export const passwordResetService = {
 
     // Send email via Mailpit / SMTP
     const emailResult = await emailService.sendPasswordResetEmail(user.email, user.name, plainToken);
+
+    await auditLogRepository.record({
+      universityId: user.universityId,
+      actorId: user.id,
+      action: 'PASSWORD_RESET_REQUESTED',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { email: user.email },
+    });
 
     return {
       success: true,
@@ -143,6 +153,14 @@ export const passwordResetService = {
     // Send asynchronous security alert email
     emailService.sendSecurityAlertEmail(tokenRecord.user.email, tokenRecord.user.name, 'PASSWORD_RESET').catch((err) => {
       logger.warn({ err }, 'Failed to dispatch security alert email after password reset.');
+    });
+
+    await notificationService.notifyUser({
+      userId: tokenRecord.user.id,
+      type: 'SECURITY_ALERT',
+      title: 'Password Reset Completed',
+      body: 'Your account password was successfully reset using a single-use token.',
+      link: '/login',
     });
 
     return {
@@ -264,10 +282,20 @@ export const passwordResetService = {
       await auditLogRepository.record({
         universityId: tokenRecord.user.universityId,
         actorId: tokenRecord.user.id,
-        action: 'auth.email_verified',
+        action: 'EMAIL_VERIFIED',
         targetType: 'user',
         targetId: tokenRecord.user.id,
       });
+    });
+
+    await notificationService.notifyUser({
+      userId: tokenRecord.user.id,
+      type: 'ACCOUNT_VERIFICATION',
+      title: 'Email Verified',
+      body: isStudent
+        ? 'Your university email address is confirmed. Welcome to Alumni Connect!'
+        : 'Your email address is confirmed. Your graduation credentials are awaiting admin review.',
+      link: isStudent ? '/student/dashboard' : '/alumni/profile',
     });
 
     return {

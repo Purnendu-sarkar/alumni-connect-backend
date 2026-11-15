@@ -55,4 +55,12 @@ export const toggleSuspensionSchema = z.object({
 export const auditLogQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(50),
+  search: z.string().trim().optional(),
+  action: z.string().trim().optional(),
+  actorId: z.string().trim().optional(),
+  actorRole: z.string().trim().optional(),
+  targetType: z.string().trim().optional(),
+  result: z.enum(['SUCCESS', 'FAILURE']).optional(),
+  startDate: z.string().trim().optional(),
+  endDate: z.string().trim().optional(),
 });

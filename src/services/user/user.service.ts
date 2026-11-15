@@ -2,6 +2,7 @@ import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
 import { mediaService } from '../media/media.service.js';
+import { notificationService } from '../notification/notification.service.js';
 import type { UpdateProfileInput } from '../../validators/user.schema.js';
 
 interface ProfileMetrics {
@@ -139,9 +140,18 @@ export const userService = {
       await auditLogRepository.record({
         universityId,
         actorId: userId,
-        action: 'user.verification_resubmitted',
+        action: 'VERIFICATION_RESUBMITTED',
         targetType: 'user',
         targetId: userId,
+      });
+
+      await notificationService.notifyRoles({
+        universityId,
+        roles: ['SUPER_ADMIN'],
+        type: 'MODERATION_RESULT',
+        title: 'Credentials Resubmitted',
+        body: `${current.name} updated academic details and resubmitted accreditation for review.`,
+        link: '/admin/verification/pending',
       });
     }
 

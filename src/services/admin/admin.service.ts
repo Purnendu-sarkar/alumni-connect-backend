@@ -3,6 +3,7 @@ import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { tokenRepository } from '../../repositories/token.repository.js';
 import { emailService } from '../email/email.service.js';
+import { notificationService } from '../notification/notification.service.js';
 import {
   userRepository,
   type VerificationFilters,
@@ -38,9 +39,17 @@ export const adminService = {
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.actorId,
-      action: 'user.sessions_terminated',
+      action: 'USER_SESSIONS_TERMINATED',
       targetType: 'user',
       targetId: input.userId,
+    });
+
+    await notificationService.notifyUser({
+      userId: input.userId,
+      type: 'SECURITY_ALERT',
+      title: 'Sessions Terminated',
+      body: 'An administrator terminated all your active device logins.',
+      link: '/login',
     });
 
     return {
@@ -100,10 +109,10 @@ export const adminService = {
 
     const auditAction =
       input.status === 'APPROVED'
-        ? 'user.verified'
+        ? 'USER_VERIFIED'
         : input.status === 'REVOKED'
-          ? 'user.verification_revoked'
-          : 'user.verification_rejected';
+          ? 'USER_VERIFICATION_REVOKED'
+          : 'USER_VERIFICATION_REJECTED';
 
     await auditLogRepository.record({
       universityId: input.universityId,
@@ -113,6 +122,24 @@ export const adminService = {
       targetId: input.userId,
       metadata: input.reason ? { reason: input.reason } : undefined,
     });
+
+    if (input.status === 'APPROVED') {
+      await notificationService.notifyUser({
+        userId: input.userId,
+        type: 'ACCOUNT_VERIFICATION',
+        title: 'Accreditation Approved',
+        body: 'Congratulations! Your alumni accreditation has been officially approved.',
+        link: '/alumni/dashboard',
+      });
+    } else if (input.status === 'REJECTED') {
+      await notificationService.notifyUser({
+        userId: input.userId,
+        type: 'MODERATION_RESULT',
+        title: 'Accreditation Declined',
+        body: `Your alumni accreditation was rejected: ${input.reason || 'Credentials could not be verified'}. Please update your academic details and resubmit.`,
+        link: '/alumni/profile/edit',
+      });
+    }
 
     return reviewed;
   },
@@ -157,35 +184,54 @@ export const adminService = {
     };
   },
 
-  async listAuditLogs(page = 1, limit = 50) {
-    const { prisma } = await import('../../config/database.js');
-    const [logs, total] = await Promise.all([
-      prisma.auditLog.findMany({
-        include: {
-          actor: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: { select: { name: true } },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.auditLog.count(),
-    ]);
+  async listAuditLogs(
+    filters: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      action?: string;
+      actorId?: string;
+      actorRole?: string;
+      targetType?: string;
+      result?: 'SUCCESS' | 'FAILURE';
+      startDate?: Date;
+      endDate?: Date;
+    } = {},
+  ) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? filters.limit : 50;
+
+    const { logs, total } = await auditLogRepository.findPaginated(
+      {
+        search: filters.search,
+        action: filters.action,
+        actorId: filters.actorId,
+        actorRole: filters.actorRole,
+        targetType: filters.targetType,
+        result: filters.result,
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      },
+      { page, limit },
+    );
 
     return {
       logs: logs.map((l) => ({
         id: l.id,
         action: l.action,
-        actorName: l.actor.name,
-        actorRole: l.actor.role.name,
-        target: l.targetType ? `${l.targetType}:${l.targetId ?? ''}` : 'System',
-        details: l.metadata ? JSON.stringify(l.metadata) : l.action,
+        actorId: l.actorId,
+        actorName: l.actor?.name ?? 'System / Anonymous',
+        actorEmail: l.actor?.email ?? null,
+        actorRole: l.actorRole ?? l.actor?.role?.name ?? 'SYSTEM',
+        target: l.targetType ? `${l.targetType}${l.targetId ? `:${l.targetId}` : ''}` : 'System',
+        targetType: l.targetType,
+        targetId: l.targetId,
+        result: l.result,
+        ip: l.ip,
+        userAgent: l.userAgent,
+        requestId: l.requestId,
+        details: l.metadata ? (typeof l.metadata === 'string' ? l.metadata : JSON.stringify(l.metadata)) : l.action,
+        metadata: l.metadata,
         timestamp: l.createdAt.toISOString(),
       })),
       meta: toPageMeta(page, limit, total),
@@ -229,7 +275,7 @@ export const adminService = {
       await auditLogRepository.record({
         universityId: university.id,
         actorId: input.actorId,
-        action: 'moderator.invited',
+        action: 'MODERATOR_INVITED',
         targetType: 'invitation',
         targetId: invitation.id,
         metadata: { email: normalizedEmail },
@@ -277,7 +323,7 @@ export const adminService = {
       await auditLogRepository.record({
         universityId: university.id,
         actorId,
-        action: 'moderator.invitation_resent',
+        action: 'MODERATOR_INVITATION_RESENT',
         targetType: 'invitation',
         targetId: invitation.id,
       });
@@ -306,7 +352,7 @@ export const adminService = {
       await auditLogRepository.record({
         universityId: university.id,
         actorId,
-        action: 'moderator.invitation_revoked',
+        action: 'MODERATOR_INVITATION_REVOKED',
         targetType: 'invitation',
         targetId: invitation.id,
       });
@@ -355,11 +401,39 @@ export const adminService = {
     await auditLogRepository.record({
       universityId: targetUser.universityId,
       actorId: input.actorId,
-      action: input.isActive ? 'user.restored' : 'user.suspended',
+      action: input.isActive ? 'USER_RESTORED' : 'USER_SUSPENDED',
       targetType: 'user',
       targetId: input.userId,
       metadata: input.reason ? { reason: input.reason } : undefined,
     });
+
+    const roleName = targetUser.role?.name;
+    const rolePrefix =
+      roleName === 'SUPER_ADMIN'
+        ? '/admin'
+        : roleName === 'MODERATOR'
+          ? '/moderator'
+          : roleName === 'ALUMNI'
+            ? '/alumni'
+            : '/student';
+
+    if (!input.isActive) {
+      await notificationService.notifyUser({
+        userId: input.userId,
+        type: 'RESTRICTION_APPLIED',
+        title: 'Account Suspended',
+        body: `Your account access has been suspended by administration.${input.reason ? ` Reason: ${input.reason}` : ''}`,
+        link: '/login',
+      });
+    } else {
+      await notificationService.notifyUser({
+        userId: input.userId,
+        type: 'RESTRICTION_ENDED',
+        title: 'Account Restored',
+        body: 'Your account access has been fully restored. Welcome back.',
+        link: `${rolePrefix}/dashboard`,
+      });
+    }
 
     return updated;
   },
@@ -408,7 +482,7 @@ export const adminService = {
     await auditLogRepository.record({
       universityId: university.id,
       actorId: input.actorId,
-      action: 'university.created',
+      action: 'UNIVERSITY_CREATED',
       targetType: 'university',
       targetId: university.id,
     });
@@ -426,7 +500,7 @@ export const adminService = {
     await auditLogRepository.record({
       universityId: university.id,
       actorId,
-      action: isActive ? 'university.activated' : 'university.deactivated',
+      action: isActive ? 'UNIVERSITY_ACTIVATED' : 'UNIVERSITY_DEACTIVATED',
       targetType: 'university',
       targetId: university.id,
     });

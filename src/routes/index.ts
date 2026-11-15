@@ -9,6 +9,7 @@ import { authRouter } from './auth.routes.js';
 import { connectionRouter } from './connection.routes.js';
 import { jobRouter } from './job.routes.js';
 import { mediaRouter } from './media.routes.js';
+import { notificationRouter } from './notification.routes.js';
 import { userRouter } from './user.routes.js';
 
 export const apiRouter = Router();
@@ -31,6 +32,7 @@ apiRouter.use('/connections', connectionRouter);
 apiRouter.use('/jobs', jobRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/media', mediaRouter);
+apiRouter.use('/notifications', notificationRouter);
 
 // Removable Development Demo Module: gracefully mounts when present and enabled
 try {

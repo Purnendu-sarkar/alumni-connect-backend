@@ -1,6 +1,7 @@
 import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { jobRepository } from '../../repositories/job.repository.js';
+import { notificationService } from '../notification/notification.service.js';
 import type { PaginationInput } from '../../utils/pagination.js';
 
 export const jobService = {
@@ -24,7 +25,7 @@ export const jobService = {
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.postedById,
-      action: 'job.created',
+      action: 'JOB_CREATED',
       targetType: 'job',
       targetId: job.id,
     });
@@ -46,11 +47,23 @@ export const jobService = {
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.reviewerId,
-      action: `job.${input.status.toLowerCase()}`,
+      action: input.status === 'APPROVED' ? 'JOB_APPROVED' : 'JOB_REJECTED',
       targetType: 'job',
       targetId: reviewed.id,
       metadata: input.rejectionReason ? { rejectionReason: input.rejectionReason } : undefined,
     });
+
+    await notificationService.notifyUser({
+      userId: job.postedById,
+      type: input.status === 'APPROVED' ? 'JOB_APPROVED' : 'JOB_REJECTED',
+      title: input.status === 'APPROVED' ? 'Job Approved' : 'Job Submission Rejected',
+      body:
+        input.status === 'APPROVED'
+          ? `Your job listing "${job.title}" has been approved and published.`
+          : `Your job listing "${job.title}" was declined: ${input.rejectionReason || 'Does not meet posting guidelines'}.`,
+      link: '/alumni/jobs',
+    });
+
     return reviewed;
   },
 
@@ -72,10 +85,19 @@ export const jobService = {
       await auditLogRepository.record({
         universityId: input.universityId,
         actorId: input.applicantId,
-        action: 'job.applied',
+        action: 'JOB_APPLICATION_SUBMITTED',
         targetType: 'job',
         targetId: input.jobId,
       });
+
+      await notificationService.notifyUser({
+        userId: job.postedById,
+        type: 'APPLICATION_RECEIVED',
+        title: 'New Job Application',
+        body: `A new application was submitted for "${job.title}".`,
+        link: '/alumni/jobs',
+      });
+
       return application;
     } catch (error) {
       if (error instanceof Error && error.message.includes('Unique constraint')) {

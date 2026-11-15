@@ -67,6 +67,33 @@ enum UploadPurpose {
   ANNOUNCEMENT_ATTACHMENT
 }
 
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+enum NotificationType {
+  ACCOUNT_VERIFICATION
+  VERIFICATION_PENDING
+  MODERATION_RESULT
+  SECURITY_ALERT
+  RESTRICTION_APPLIED
+  RESTRICTION_ENDED
+  SYSTEM_ANNOUNCEMENT
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  MENTORSHIP_REQUEST
+  MENTORSHIP_DECISION
+  JOB_APPROVED
+  JOB_REJECTED
+  JOB_CHANGES_REQUESTED
+  APPLICATION_RECEIVED
+  APPLICATION_UPDATE
+  EVENT_REMINDER
+  ANNOUNCEMENT
+  STORY_REVIEW
+}
+
 model University {
   id               String             @id @default(cuid())
   name             String
@@ -152,6 +179,8 @@ model User {
   uploadedFiles       UploadedFile[]
   analyticsEvents     AnalyticsEvent[]
   auditLogs           AuditLog[]          @relation("AuditActor")
+  notifications       Notification[]
+  notificationPreferences NotificationPreference[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
@@ -389,19 +418,58 @@ model AnalyticsEvent {
 }
 
 model AuditLog {
-  id           String     @id @default(cuid())
+  id           String       @id @default(cuid())
   universityId String
-  actorId      String
+  actorId      String?
+  actorRole    String?
   action       String
   targetType   String?
   targetId     String?
+  result       AuditResult  @default(SUCCESS)
+  ip           String?
+  userAgent    String?
+  requestId    String?
   metadata     Json?
-  createdAt    DateTime   @default(now())
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  actor        User       @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt    DateTime     @default(now())
+  university   University   @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  actor        User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
 
-  @@index([universityId, createdAt])
-  @@index([actorId, createdAt])
+  @@index([universityId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+  @@index([result, createdAt(sort: Desc)])
+  @@index([requestId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([userId, type, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model NotificationPreference {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  inApp     Boolean          @default(true)
+  email     Boolean          @default(true)
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
 }
 
 model VerificationToken {

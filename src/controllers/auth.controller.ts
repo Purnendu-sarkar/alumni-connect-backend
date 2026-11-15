@@ -34,7 +34,11 @@ export const authController = {
 
   login: asyncHandler(async (request, response) => {
     const body = request.body as LoginInput;
-    const session = await authService.login(body.email, body.password);
+    const session = await authService.login(body.email, body.password, {
+      ip: request.ip,
+      userAgent: request.get('user-agent'),
+      requestId: request.requestId,
+    });
     writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
     return sendSuccess(response, {
       message: 'Signed in successfully.',

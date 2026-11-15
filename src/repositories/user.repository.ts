@@ -411,6 +411,23 @@ export const userRepository = {
     };
   },
 
+  findActiveUsersByRoles(roles: string[], universityId?: string) {
+    return prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { name: { in: roles as any } },
+        ...(universityId ? { universityId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        universityId: true,
+        role: { select: { name: true } },
+      },
+    });
+  },
+
   verifyForUniversity(userId: string, universityId: string) {
     return prisma.user.update({
       where: { id: userId, universityId },

@@ -2,6 +2,7 @@ import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { connectionRepository } from '../../repositories/connection.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
+import { notificationService } from '../notification/notification.service.js';
 
 export const connectionService = {
   async create(input: {
@@ -31,10 +32,21 @@ export const connectionService = {
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.requesterId,
-      action: 'connection.created',
+      action: 'CONNECTION_REQUESTED',
       targetType: 'connection',
       targetId: connection.id,
     });
+
+    const requester = await userRepository.findAuthenticatedById(input.requesterId);
+    const recipientRolePrefix = recipient.role.name === 'ALUMNI' ? '/alumni' : '/student';
+    await notificationService.notifyUser({
+      userId: input.recipientId,
+      type: 'CONNECTION_REQUEST',
+      title: 'New Connection Request',
+      body: `${requester?.name || 'A campus member'} sent you a connection request.`,
+      link: `${recipientRolePrefix}/connections`,
+    });
+
     return connection;
   },
 
@@ -57,10 +69,25 @@ export const connectionService = {
     await auditLogRepository.record({
       universityId: input.universityId,
       actorId: input.recipientId,
-      action: `connection.${input.status.toLowerCase()}`,
+      action: input.status === 'ACCEPTED' ? 'CONNECTION_ACCEPTED' : 'CONNECTION_DECLINED',
       targetType: 'connection',
       targetId: updated.id,
     });
+
+    if (input.status === 'ACCEPTED') {
+      const responder = await userRepository.findAuthenticatedById(input.recipientId);
+      const requesterUser = await userRepository.findAuthenticatedById(connection.requesterId);
+      const requesterRolePrefix = requesterUser?.role.name === 'ALUMNI' ? '/alumni' : '/student';
+
+      await notificationService.notifyUser({
+        userId: connection.requesterId,
+        type: 'CONNECTION_ACCEPTED',
+        title: 'Connection Accepted',
+        body: `${responder?.name || 'Your connection'} accepted your request.`,
+        link: `${requesterRolePrefix}/connections`,
+      });
+    }
+
     return updated;
   },
 

@@ -11,6 +11,7 @@ import {
   userRepository,
   type AuthenticatedUserRecord,
 } from '../../repositories/user.repository.js';
+import { notificationService } from '../notification/notification.service.js';
 import { passwordService } from './password.service.js';
 import { tokenService } from './token.service.js';
 
@@ -126,6 +127,48 @@ export const authService = {
       passwordHash,
     });
 
+    await auditLogRepository.record({
+      universityId: university.id,
+      actorId: user.id,
+      actorRole: input.role,
+      action: 'USER_REGISTERED',
+      result: 'SUCCESS',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: {
+        role: input.role,
+        department: input.department,
+        batch: input.batch,
+      },
+    });
+
+    if (input.role === 'STUDENT') {
+      await notificationService.notifyUser({
+        userId: user.id,
+        type: 'ACCOUNT_VERIFICATION',
+        title: 'Welcome to Alumni Connect',
+        body: 'Please verify your university email address to activate all network features.',
+        link: '/student/profile',
+      });
+    } else if (input.role === 'ALUMNI') {
+      await notificationService.notifyUser({
+        userId: user.id,
+        type: 'VERIFICATION_PENDING',
+        title: 'Registration Submitted',
+        body: 'Your graduation credentials have been submitted for administrative verification.',
+        link: '/alumni/profile',
+      });
+
+      await notificationService.notifyRoles({
+        universityId: university.id,
+        roles: ['SUPER_ADMIN'],
+        type: 'MODERATION_RESULT',
+        title: 'New Alumni Verification Pending',
+        body: `${user.name} registered as an alumnus and requires credential verification.`,
+        link: '/admin/verification/pending',
+      });
+    }
+
     // Automatically generate and dispatch email verification token
     const { passwordResetService } = await import('./password-reset.service.js');
     const emailResult = await passwordResetService.requestEmailVerification(user.id);
@@ -137,13 +180,45 @@ export const authService = {
     };
   },
 
-  async login(email: string, password: string) {
+  async login(
+    email: string,
+    password: string,
+    context?: { ip?: string; userAgent?: string; requestId?: string },
+  ) {
     const user = await userRepository.findAuthenticatedByEmail(email);
     if (!user || !user.university.isActive) {
+      const firstUniversity = await prisma.university.findFirst();
+      if (firstUniversity) {
+        await auditLogRepository.record({
+          universityId: firstUniversity.id,
+          action: 'LOGIN_FAILED',
+          result: 'FAILURE',
+          ip: context?.ip,
+          userAgent: context?.userAgent,
+          requestId: context?.requestId,
+          metadata: {
+            reason: 'ACCOUNT_NOT_FOUND',
+            emailDomain: email.split('@')[1] ?? 'unknown',
+          },
+        });
+      }
       throw ApiError.unauthorized('Email or password is incorrect.');
     }
 
     if (!user.isActive) {
+      await auditLogRepository.record({
+        universityId: user.universityId,
+        actorId: user.id,
+        actorRole: user.role?.name,
+        action: 'LOGIN_FAILED',
+        result: 'FAILURE',
+        targetType: 'user',
+        targetId: user.id,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+        requestId: context?.requestId,
+        metadata: { reason: 'ACCOUNT_SUSPENDED' },
+      });
       throw ApiError.unauthorized(
         'Your account has been suspended or deactivated. Please contact administration.',
       );
@@ -154,10 +229,38 @@ export const authService = {
     }
 
     const passwordMatches = await passwordService.verify(user.passwordHash, password);
-    if (!passwordMatches) throw ApiError.unauthorized('Email or password is incorrect.');
+    if (!passwordMatches) {
+      await auditLogRepository.record({
+        universityId: user.universityId,
+        actorId: user.id,
+        actorRole: user.role?.name,
+        action: 'LOGIN_FAILED',
+        result: 'FAILURE',
+        targetType: 'user',
+        targetId: user.id,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+        requestId: context?.requestId,
+        metadata: { reason: 'INVALID_CREDENTIALS' },
+      });
+      throw ApiError.unauthorized('Email or password is incorrect.');
+    }
 
     // Enforce Alumni administrative rejection check first so rejected alumni receive their explicit rejection message and reason
     if (user.role?.name === 'ALUMNI' && user.verificationStatus === 'REJECTED') {
+      await auditLogRepository.record({
+        universityId: user.universityId,
+        actorId: user.id,
+        actorRole: user.role?.name,
+        action: 'LOGIN_FAILED',
+        result: 'FAILURE',
+        targetType: 'user',
+        targetId: user.id,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+        requestId: context?.requestId,
+        metadata: { reason: 'ALUMNI_VERIFICATION_REJECTED' },
+      });
       throw ApiError.unauthorized(
         'Your alumni accreditation was rejected: ' +
           (user.rejectionReason || 'Please contact administration.'),
@@ -166,6 +269,19 @@ export const authService = {
 
     // Enforce email verification check
     if (!user.verified) {
+      await auditLogRepository.record({
+        universityId: user.universityId,
+        actorId: user.id,
+        actorRole: user.role?.name,
+        action: 'LOGIN_FAILED',
+        result: 'FAILURE',
+        targetType: 'user',
+        targetId: user.id,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+        requestId: context?.requestId,
+        metadata: { reason: 'EMAIL_UNVERIFIED' },
+      });
       throw ApiError.unauthorized(
         'Your email address has not been verified. Please check your inbox for the verification link.',
       );
@@ -173,10 +289,36 @@ export const authService = {
 
     // Enforce Alumni administrative verification check
     if (user.role?.name === 'ALUMNI' && user.verificationStatus === 'PENDING') {
+      await auditLogRepository.record({
+        universityId: user.universityId,
+        actorId: user.id,
+        actorRole: user.role?.name,
+        action: 'LOGIN_FAILED',
+        result: 'FAILURE',
+        targetType: 'user',
+        targetId: user.id,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+        requestId: context?.requestId,
+        metadata: { reason: 'ALUMNI_VERIFICATION_PENDING' },
+      });
       throw ApiError.unauthorized(
         'Your alumni registration is awaiting administrative verification. You will receive an email once approved.',
       );
     }
+
+    await auditLogRepository.record({
+      universityId: user.universityId,
+      actorId: user.id,
+      actorRole: user.role?.name,
+      action: 'LOGIN_SUCCESS',
+      result: 'SUCCESS',
+      targetType: 'user',
+      targetId: user.id,
+      ip: context?.ip,
+      userAgent: context?.userAgent,
+      requestId: context?.requestId,
+    });
 
     return issueSession(user);
   },
@@ -284,6 +426,26 @@ export const authService = {
       return created;
     });
 
+    await auditLogRepository.record({
+      universityId: university.id,
+      actorId: user.id,
+      actorRole: 'MODERATOR',
+      action: 'MODERATOR_SETUP_COMPLETED',
+      result: 'SUCCESS',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { email: invitation.email },
+    });
+
+    await notificationService.notifyRoles({
+      universityId: university.id,
+      roles: ['SUPER_ADMIN'],
+      type: 'SECURITY_ALERT',
+      title: 'Moderator Onboarded',
+      body: `${user.name} (${user.email}) activated their moderator account.`,
+      link: '/admin/users/moderators',
+    });
+
     return issueSession(user);
   },
 
@@ -363,6 +525,24 @@ export const authService = {
       logger.warn({ err }, 'Failed to dispatch security alert email after password change.');
     });
 
+    const roleName = user.role?.name;
+    const rolePrefix =
+      roleName === 'SUPER_ADMIN'
+        ? '/admin'
+        : roleName === 'MODERATOR'
+          ? '/moderator'
+          : roleName === 'ALUMNI'
+            ? '/alumni'
+            : '/student';
+
+    await notificationService.notifyUser({
+      userId,
+      type: 'SECURITY_ALERT',
+      title: 'Password Updated',
+      body: 'Your account password was updated successfully. If you did not perform this change, contact administration immediately.',
+      link: `${rolePrefix}/settings/security`,
+    });
+
     return { success: true, message: 'Password updated successfully. Please sign in with your new password.' };
   },
 
@@ -382,6 +562,7 @@ export const authService = {
         universityId: storedToken.universityId,
         actorId: storedToken.userId,
         action: 'SESSION_REUSE_DETECTED',
+        result: 'FAILURE',
         targetType: 'session',
         targetId: storedToken.id,
         metadata: {
@@ -389,6 +570,13 @@ export const authService = {
           userAgent: context?.userAgent,
           compromisedFamilyId: storedToken.familyId,
         },
+      });
+      await notificationService.notifyUser({
+        userId: storedToken.userId,
+        type: 'SECURITY_ALERT',
+        title: 'Suspicious Session Terminated',
+        body: 'A compromised session was detected. All your active sessions were terminated for security.',
+        link: '/login',
       });
       throw new ApiError(
         401,

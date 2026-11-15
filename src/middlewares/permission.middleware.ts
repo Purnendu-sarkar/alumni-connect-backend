@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 
 import type { PermissionKey } from '../constants/permissions.js';
 import { ApiError } from '../errors/api-error.js';
+import { auditLogRepository } from '../repositories/audit-log.repository.js';
 
 export function requirePermission(...requiredPermissions: PermissionKey[]): RequestHandler {
   return (request, _response, next) => {
@@ -9,7 +10,30 @@ export function requirePermission(...requiredPermissions: PermissionKey[]): Requ
 
     const granted = new Set(request.auth.permissions);
     const isAllowed = requiredPermissions.every((permission) => granted.has(permission));
-    if (!isAllowed) return next(ApiError.forbidden());
+    if (!isAllowed) {
+      if (request.auth.universityId) {
+        auditLogRepository
+          .record({
+            universityId: request.auth.universityId,
+            actorId: request.auth.userId,
+            actorRole: request.auth.role,
+            action: 'FORBIDDEN_ACCESS',
+            result: 'FAILURE',
+            ip: request.ip,
+            userAgent: request.headers['user-agent'] as string | undefined,
+            requestId: request.requestId,
+            targetType: 'endpoint',
+            targetId: request.originalUrl,
+            metadata: {
+              requiredPermissions,
+              path: request.originalUrl,
+              method: request.method,
+            },
+          })
+          .catch(() => {});
+      }
+      return next(ApiError.forbidden());
+    }
 
     return next();
   };

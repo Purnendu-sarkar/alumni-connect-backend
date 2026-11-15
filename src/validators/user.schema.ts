@@ -24,8 +24,8 @@ export const updateProfileSchema = z.object({
   websiteUrl: nullableUrl,
   githubUrl: nullableUrl,
 
-  department: z.string().trim().min(1).max(100).optional(),
-  batch: z.string().trim().min(1).max(100).optional(),
+  department: nullableOrEmptyString(100),
+  batch: nullableOrEmptyString(100),
 
   // Student-specific fields
   studentId: nullableOrEmptyString(100),
