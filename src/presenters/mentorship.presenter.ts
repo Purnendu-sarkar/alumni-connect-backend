@@ -1,5 +1,46 @@
+export interface MentorshipItemSource {
+  id: string;
+  mentorId: string;
+  menteeId: string;
+  topic: string;
+  careerGoal?: string | null;
+  message?: string | null;
+  preferredCommunication?: string | null;
+  availability?: string | null;
+  expectedDuration?: string | null;
+  status: string;
+  clarificationQuestion?: string | null;
+  clarificationReply?: string | null;
+  decisionNote?: string | null;
+  scheduledAt?: Date | string | null;
+  startedAt?: Date | string | null;
+  endedAt?: Date | string | null;
+  endedById?: string | null;
+  endNote?: string | null;
+  alumniNote?: string | null;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  mentor?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    department?: string | null;
+    currentCompany?: string | null;
+    position?: string | null;
+    email?: string | null;
+  } | null;
+  mentee?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    department?: string | null;
+    batch?: string | null;
+    email?: string | null;
+  } | null;
+}
+
 export const mentorshipPresenter = {
-  presentItem(item: any, viewerId: string) {
+  presentItem(item: MentorshipItemSource, viewerId: string) {
     const isMentor = viewerId === item.mentorId;
 
     return {
@@ -49,7 +90,7 @@ export const mentorshipPresenter = {
     };
   },
 
-  presentList(items: any[], viewerId: string) {
+  presentList(items: MentorshipItemSource[], viewerId: string) {
     return items.map((item) => this.presentItem(item, viewerId));
   },
 };

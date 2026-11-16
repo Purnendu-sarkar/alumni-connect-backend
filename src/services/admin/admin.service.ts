@@ -4,6 +4,7 @@ import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { tokenRepository } from '../../repositories/token.repository.js';
 import { emailService } from '../email/email.service.js';
 import { notificationService } from '../notification/notification.service.js';
+import { cacheService } from '../cache/cache.service.js';
 import {
   userRepository,
   type VerificationFilters,
@@ -122,6 +123,8 @@ export const adminService = {
       targetId: input.userId,
       metadata: input.reason ? { reason: input.reason } : undefined,
     });
+
+    await cacheService.bumpVersion('dir');
 
     if (input.status === 'APPROVED') {
       await notificationService.notifyUser({
@@ -406,6 +409,8 @@ export const adminService = {
       targetId: input.userId,
       metadata: input.reason ? { reason: input.reason } : undefined,
     });
+
+    await cacheService.bumpVersion('dir');
 
     const roleName = targetUser.role?.name;
     const rolePrefix =

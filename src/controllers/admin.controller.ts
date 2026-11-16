@@ -119,7 +119,7 @@ export const adminController = {
   listAuditLogs: asyncHandler(async (request, response) => {
     const page = request.query.page ? Number(request.query.page) : 1;
     const limit = request.query.limit ? Number(request.query.limit) : 50;
-    const query = request.query as any;
+    const query = request.query as Record<string, string | undefined>;
     const result = await adminService.listAuditLogs({
       page,
       limit,
@@ -128,7 +128,7 @@ export const adminController = {
       actorId: query.actorId,
       actorRole: query.actorRole,
       targetType: query.targetType,
-      result: query.result,
+      result: query.result as 'SUCCESS' | 'FAILURE' | undefined,
       startDate: query.startDate ? new Date(query.startDate) : undefined,
       endDate: query.endDate ? new Date(query.endDate) : undefined,
     });

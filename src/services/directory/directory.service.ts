@@ -19,15 +19,64 @@ export const directoryService = {
 
     // 1. Get all user IDs blocked by or blocking this viewer
     const blockedUserIds = await blockRepository.getBlockedUserIds(viewer.id);
+    const excludedUserIds = [viewer.id, ...blockedUserIds];
 
-    // 2. Fetch candidates matching query filters
-    const { candidates, total, page, limit, totalPages } =
-      await directoryRepository.searchCandidates(
+    // 2. Fetch candidates matching query filters with fail-open caching
+    const version = await cacheService.getVersion('dir');
+    const queryHash = Buffer.from(
+      JSON.stringify({
+        q: filters.q?.trim().toLowerCase() ?? '',
+        dept: filters.department?.trim() ?? '',
+        gradYear: filters.gradYear?.trim() ?? '',
+        ind: filters.industry?.trim() ?? '',
+        loc: filters.location?.trim() ?? '',
+        skills: (filters.skills ?? []).slice().sort(),
+        mentor: filters.mentorship ? String(filters.mentorship) : '',
+        sort: filters.sort ?? 'recentlyJoined',
+        page: Math.max(filters.page ?? 1, 1),
+        limit: Math.min(Math.max(filters.limit ?? 20, 1), 50),
+      }),
+    ).toString('base64url');
+    const cacheKey = `dir:v${version}:${universityId}:${group}:${queryHash}`;
+
+    const cachedResult = await cacheService.get<{
+      candidates: Awaited<ReturnType<typeof directoryRepository.searchCandidates>>['candidates'];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(cacheKey);
+
+    let candidates: Awaited<ReturnType<typeof directoryRepository.searchCandidates>>['candidates'];
+    let total: number;
+    let page: number;
+    let limit: number;
+    let totalPages: number;
+
+    if (cachedResult && cachedResult.candidates) {
+      // Filter out viewer and blocked users from cached candidates
+      const excludedSet = new Set(excludedUserIds);
+      candidates = cachedResult.candidates.filter((c) => !excludedSet.has(c.id));
+      total = Math.max(0, cachedResult.total - (cachedResult.candidates.length - candidates.length));
+      page = cachedResult.page;
+      limit = cachedResult.limit;
+      totalPages = cachedResult.totalPages;
+    } else {
+      const dbResult = await directoryRepository.searchCandidates(
         universityId,
         group,
         filters,
-        [viewer.id, ...blockedUserIds],
+        excludedUserIds,
       );
+      candidates = dbResult.candidates;
+      total = dbResult.total;
+      page = dbResult.page;
+      limit = dbResult.limit;
+      totalPages = dbResult.totalPages;
+
+      // Cache candidate list viewer-neutrally (TTL 120s)
+      await cacheService.set(cacheKey, dbResult, 120);
+    }
 
     if (candidates.length === 0) {
       return {

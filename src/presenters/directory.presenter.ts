@@ -1,11 +1,61 @@
+import type { PrivacyScope } from '../generated/prisma/client.js';
 import { privacyService, type ViewerRelationship } from '../services/privacy/privacy.service.js';
 
 export type ConnectionStatusTag = 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'CONNECTED';
 export type MentorshipBadge = 'OPEN' | 'FULL' | 'CLOSED' | null;
 
+export interface DirectoryMemberSource {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  role?: { name: string } | null;
+  department?: string | null;
+  departmentId?: string | null;
+  departmentRef?: { id: string; name: string; code: string; faculty?: string | null } | null;
+  batch?: string | null;
+  graduationYear?: string | null;
+  verified?: boolean;
+  verificationStatus?: string;
+  currentCompany?: string | null;
+  position?: string | null;
+  headline?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  skills?: string[] | null;
+  isMentorshipAvailable?: boolean | null;
+  mentorshipStatus?: string | null;
+  maxActiveMentees?: number | null;
+  mentoringRequests?: Array<{ id: string }> | null;
+  privacySetting?: {
+    profileVisibility?: PrivacyScope | string | null;
+    emailVisibility?: PrivacyScope | string | null;
+    phoneVisibility?: PrivacyScope | string | null;
+    locationVisibility?: PrivacyScope | string | null;
+    careerVisibility?: PrivacyScope | string | null;
+    educationVisibility?: PrivacyScope | string | null;
+    skillsVisibility?: PrivacyScope | string | null;
+    mentorshipVisibility?: PrivacyScope | string | null;
+  } | null;
+  studentId?: string | null;
+  academicId?: string | null;
+  admissionYear?: string | null;
+  expectedGraduationYear?: string | null;
+  currentSemester?: string | null;
+  employmentStatus?: string | null;
+  interests?: string[] | null;
+  linkedinUrl?: string | null;
+  githubUrl?: string | null;
+  websiteUrl?: string | null;
+  mentorshipTopics?: string[] | null;
+  university?: { id: string; name: string; slug: string } | null;
+  createdAt?: Date | string | null;
+}
+
 export const directoryPresenter = {
   presentCard(
-    member: any,
+    member: DirectoryMemberSource,
     relationship: ViewerRelationship,
     connectionStatus: ConnectionStatusTag = 'NONE',
   ) {
@@ -58,7 +108,7 @@ export const directoryPresenter = {
   },
 
   presentDetail(
-    member: any,
+    member: DirectoryMemberSource,
     relationship: ViewerRelationship,
     connectionStatus: ConnectionStatusTag = 'NONE',
     activeMentorshipStatus: string | null = null,

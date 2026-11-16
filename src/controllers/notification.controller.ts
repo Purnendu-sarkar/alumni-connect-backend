@@ -1,3 +1,4 @@
+import type { NotificationType } from '../generated/prisma/client.js';
 import { notificationService } from '../services/notification/notification.service.js';
 import { sendSuccess } from '../utils/api-response.js';
 import { asyncHandler } from '../utils/async-handler.js';
@@ -9,7 +10,7 @@ export const notificationController = {
       page?: number;
       limit?: number;
       filter?: 'all' | 'unread';
-      type?: any;
+      type?: NotificationType;
     };
 
     const result = await notificationService.getUserNotifications(userId, {
@@ -24,7 +25,7 @@ export const notificationController = {
       meta: {
         ...result.meta,
         unreadCount: result.unreadCount,
-      } as any,
+      },
     });
   }),
 

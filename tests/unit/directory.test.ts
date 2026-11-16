@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { directoryPresenter } from '../../src/presenters/directory.presenter.js';
-import { privacyService } from '../../src/services/privacy/privacy.service.js';
 import { directoryService } from '../../src/services/directory/directory.service.js';
 import { directoryRepository } from '../../src/repositories/directory.repository.js';
 import { blockRepository } from '../../src/repositories/block.repository.js';

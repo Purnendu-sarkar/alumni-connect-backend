@@ -55,7 +55,7 @@ export const privacyService = {
     return updated;
   },
 
-  isFieldVisible(scope: PrivacyScope | null | undefined, relationship: ViewerRelationship): boolean {
+  isFieldVisible(scope: PrivacyScope | string | null | undefined, relationship: ViewerRelationship): boolean {
     if (relationship === 'BLOCKED') return false;
     if (relationship === 'SELF') return true;
 

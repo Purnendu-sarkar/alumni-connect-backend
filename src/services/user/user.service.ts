@@ -2,6 +2,7 @@ import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { departmentRepository } from '../../repositories/department.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
+import { cacheService } from '../cache/cache.service.js';
 import { mediaService } from '../media/media.service.js';
 import { notificationService } from '../notification/notification.service.js';
 import type { UpdateProfileInput } from '../../validators/user.schema.js';
@@ -192,6 +193,7 @@ export const userService = {
     }
 
     const updated = await userRepository.updateProfile(userId, universityId, data);
+    await cacheService.bumpVersion('dir');
     const metrics = calculateProfileMetrics(updated);
 
     return { ...updated, ...metrics };

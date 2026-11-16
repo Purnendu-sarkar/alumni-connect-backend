@@ -5,6 +5,7 @@ export interface PageMeta {
   limit: number;
   total: number;
   totalPages: number;
+  unreadCount?: number;
 }
 
 interface SuccessOptions<T> {
