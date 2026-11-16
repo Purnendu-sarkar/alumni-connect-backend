@@ -49,10 +49,57 @@ enum MentorshipStatus {
 }
 
 enum JobStatus {
-  PENDING
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
   APPROVED
   REJECTED
+  PUBLISHED
   CLOSED
+  PENDING
+}
+
+enum ApplicationStatus {
+  APPLIED
+  UNDER_REVIEW
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+  WITHDRAWN
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  CONTRACT
+}
+
+enum WorkMode {
+  ON_SITE
+  REMOTE
+  HYBRID
+}
+
+enum ExperienceLevel {
+  ANY
+  ENTRY_LEVEL
+  MID_LEVEL
+  SENIOR
+  EXECUTIVE
+}
+
+enum JobModerationAction {
+  SUBMIT
+  WITHDRAW
+  CLAIM
+  UNCLAIM
+  APPROVE
+  REJECT
+  REQUEST_CHANGES
+  OVERRIDE
+  CLOSE
 }
 
 enum ContentStatus {
@@ -193,9 +240,12 @@ model User {
   receivedConnections Connection[]        @relation("ConnectionRecipient")
   mentoringRequests   MentorshipRequest[] @relation("Mentor")
   menteeRequests      MentorshipRequest[] @relation("Mentee")
-  jobsPosted          Job[]               @relation("JobPoster")
-  jobsApproved        Job[]               @relation("JobApprover")
-  jobApplications     JobApplication[]
+  jobsPosted          Job[]                         @relation("JobPoster")
+  jobsReviewed        Job[]                         @relation("JobReviewer")
+  jobsApproved        Job[]                         @relation("JobApprover")
+  jobApplications     JobApplication[]              @relation("ApplicationApplicant")
+  jobModerations      JobModerationRecord[]         @relation("JobModActor")
+  jobAppStatusChanges JobApplicationStatusHistory[] @relation("JobAppHistoryActor")
   reportsFiled        Report[]            @relation("ReportReporter")
   eventsCreated       Event[]             @relation("EventCreator")
   contentsCreated     Content[]           @relation("ContentCreator")
@@ -367,43 +417,117 @@ model Block {
 }
 
 model Job {
-  id           String    @id @default(cuid())
-  universityId String
-  postedById   String
-  approvedById String?
-  title        String
-  description  String
-  company      String
-  location     String?
-  employmentType String?
-  applicationUrl String?
-  applicationEmail String?
-  status       JobStatus @default(PENDING)
-  expiresAt    DateTime?
-  approvedAt   DateTime?
-  rejectionReason String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  postedBy     User      @relation("JobPoster", fields: [postedById], references: [id], onDelete: Restrict)
-  approvedBy   User?     @relation("JobApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  applications JobApplication[]
+  id                 String                @id @default(cuid())
+  universityId       String
+  postedById         String
+  reviewerId         String?
+  approvedById       String?
+  title              String
+  description        String
+  requirements       String?               @db.Text
+  company            String
+  category           String                @default("General")
+  employmentType     String?               @default("FULL_TIME")
+  workMode           WorkMode              @default(ON_SITE)
+  experienceLevel    ExperienceLevel       @default(ANY)
+  location           String?
+  salaryMin          Int?
+  salaryMax          Int?
+  salaryCurrency     String                @default("BDT")
+  deadline           DateTime              @default(now())
+  expiresAt          DateTime?
+  referralAvailable  Boolean               @default(false)
+  requireResume      Boolean               @default(false)
+  requireCoverLetter Boolean               @default(false)
+  status             JobStatus             @default(DRAFT)
+  submittedAt        DateTime?
+  claimedAt          DateTime?
+  publishedAt        DateTime?
+  approvedAt         DateTime?
+  closedAt           DateTime?
+  closedById         String?
+  closedReason       String?
+  rejectionReason    String?
+  applicationUrl     String?
+  applicationEmail   String?
+  version            Int                   @default(1)
+  deletedAt          DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  @@index([universityId, status, createdAt])
+  university   University             @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  postedBy     User                   @relation("JobPoster", fields: [postedById], references: [id], onDelete: Restrict)
+  reviewer     User?                  @relation("JobReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  approvedBy   User?                  @relation("JobApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  applications JobApplication[]
+  moderations  JobModerationRecord[]
+
+  @@index([universityId, status, publishedAt(sort: Desc)])
+  @@index([universityId, status, submittedAt])
+  @@index([postedById, status])
+  @@index([reviewerId, status])
+  @@index([category])
+  @@index([deadline])
   @@index([universityId, company])
 }
 
 model JobApplication {
-  id        String   @id @default(cuid())
-  jobId     String
-  applicantId String
-  message   String?
-  createdAt DateTime @default(now())
-  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  applicant User     @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  id                  String                        @id @default(cuid())
+  jobId               String
+  applicantId         String
+  coverLetter         String?                       @db.Text
+  message             String?
+  resumeKey           String?
+  shareProfileConsent Boolean                       @default(true)
+  profileSnapshot     Json?
+  status              ApplicationStatus             @default(APPLIED)
+  ownerNote           String?                       @db.Text
+  withdrawnAt         DateTime?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @default(now()) @updatedAt
+
+  job       Job                           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicant User                          @relation("ApplicationApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  history   JobApplicationStatusHistory[]
 
   @@unique([jobId, applicantId])
-  @@index([applicantId, createdAt])
+  @@index([applicantId, status])
+  @@index([jobId, status])
+  @@index([createdAt])
+}
+
+model JobModerationRecord {
+  id                   String              @id @default(cuid())
+  jobId                String
+  actorId              String
+  actorRole            String
+  action               JobModerationAction
+  reasonCode           String?
+  ownerVisibleNote     String?             @db.Text
+  internalNote         String?             @db.Text
+  overrideOfReviewerId String?
+  createdAt            DateTime            @default(now())
+
+  job   Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  actor User @relation("JobModActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([jobId, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
+}
+
+model JobApplicationStatusHistory {
+  id            String             @id @default(cuid())
+  applicationId String
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  changedById   String
+  note          String?            @db.Text
+  createdAt     DateTime           @default(now())
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedBy   User           @relation("JobAppHistoryActor", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt])
 }
 
 model Event {
