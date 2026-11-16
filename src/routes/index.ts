@@ -20,6 +20,10 @@ import { notificationRouter } from './notification.routes.js';
 import { privacyRouter } from './privacy.routes.js';
 import { uploadRouter } from './upload.routes.js';
 import { userRouter } from './user.routes.js';
+import { eventRouter } from './event.routes.js';
+import { adminEventRouter } from './admin-event.routes.js';
+import { announcementRouter } from './announcement.routes.js';
+import { adminAnnouncementRouter } from './admin-announcement.routes.js';
 
 export const apiRouter = Router();
 
@@ -53,6 +57,10 @@ apiRouter.use('/uploads', uploadRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/media', mediaRouter);
 apiRouter.use('/notifications', notificationRouter);
+apiRouter.use('/events', eventRouter);
+apiRouter.use('/admin/events', adminEventRouter);
+apiRouter.use('/announcements', announcementRouter);
+apiRouter.use('/admin/announcements', adminAnnouncementRouter);
 
 // Removable Development Demo Module: gracefully mounts when present and enabled
 try {

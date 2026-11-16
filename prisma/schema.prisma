@@ -156,6 +156,47 @@ enum NotificationType {
   STORY_REVIEW
 }
 
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum EventMode {
+  IN_PERSON
+  ONLINE
+  HYBRID
+}
+
+enum RsvpStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+  WAITLISTED
+  CANCELLED
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AnnouncementCategory {
+  GENERAL
+  ACADEMIC
+  CAREER
+  EVENT
+  SECURITY_SYSTEM
+}
+
+enum AnnouncementAudience {
+  ALL
+  STUDENTS
+  ALUMNI
+}
+
 model University {
   id               String             @id @default(cuid())
   name             String
@@ -171,6 +212,7 @@ model University {
   mentorships      MentorshipRequest[]
   jobs             Job[]
   events           Event[]
+  announcements    Announcement[]
   contents         Content[]
   reports          Report[]
   mediaAssets      MediaAsset[]
@@ -248,6 +290,8 @@ model User {
   jobAppStatusChanges JobApplicationStatusHistory[] @relation("JobAppHistoryActor")
   reportsFiled        Report[]            @relation("ReportReporter")
   eventsCreated       Event[]             @relation("EventCreator")
+  eventRsvps          EventRsvp[]         @relation("RsvpUser")
+  announcements       Announcement[]      @relation("AnnouncementAuthor")
   contentsCreated     Content[]           @relation("ContentCreator")
   mediaUploaded       MediaAsset[]        @relation("MediaUploader")
   uploadedFiles       UploadedFile[]
@@ -531,25 +575,89 @@ model JobApplicationStatusHistory {
 }
 
 model Event {
-  id           String     @id @default(cuid())
-  universityId String
-  createdById  String
-  title        String
-  description  String
-  slug         String
-  startsAt     DateTime
-  endsAt       DateTime?
-  location     String?
-  bannerPublicId String?
-  isPublished  Boolean    @default(false)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  createdBy    User       @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  media        MediaAsset[]
+  id              String       @id @default(cuid())
+  universityId    String
+  createdById     String
+  title           String
+  slug            String
+  description     String       @db.Text
+  category        String       @default("GENERAL")
+  organizer       String?
+  startsAt        DateTime
+  endsAt          DateTime
+  mode            EventMode    @default(IN_PERSON)
+  venue           String?
+  onlineUrl       String?
+  capacity        Int?
+  rsvpDeadline    DateTime?
+  waitlistEnabled Boolean      @default(true)
+  bannerUrl       String?
+  bannerPublicId  String?
+  reminderEnabled Boolean      @default(true)
+  reminderSentAt  DateTime?
+  status          EventStatus  @default(DRAFT)
+  cancelledAt     DateTime?
+  cancelReason    String?
+  completedAt     DateTime?
+  version         Int          @default(1)
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  university      University   @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  createdBy       User         @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  rsvps           EventRsvp[]
+  media           MediaAsset[]
 
   @@unique([universityId, slug])
-  @@index([universityId, startsAt])
+  @@index([universityId, status, startsAt])
+  @@index([category])
+}
+
+model EventRsvp {
+  id           String     @id @default(cuid())
+  eventId      String
+  userId       String
+  status       RsvpStatus @default(GOING)
+  waitlistedAt DateTime?
+  attendedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user         User       @relation("RsvpUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, userId])
+  @@index([eventId, status, waitlistedAt])
+  @@index([userId, status])
+}
+
+model Announcement {
+  id           String               @id @default(cuid())
+  universityId String
+  authorId     String
+  title        String
+  body         String               @db.Text
+  category     AnnouncementCategory @default(GENERAL)
+  audience     AnnouncementAudience @default(ALL)
+  pinned       Boolean              @default(false)
+  status       AnnouncementStatus   @default(DRAFT)
+  publishAt    DateTime?
+  archiveAt    DateTime?
+  publishedAt  DateTime?
+  archivedAt   DateTime?
+  editedAt     DateTime?
+  version      Int                  @default(1)
+  deletedAt    DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  university   University           @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  author       User                 @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([universityId, status, pinned, publishedAt(sort: Desc)])
+  @@index([universityId, status, publishAt])
+  @@index([universityId, category])
 }
 
 model Content {

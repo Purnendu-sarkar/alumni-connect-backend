@@ -50,3 +50,33 @@ export const authenticate: RequestHandler = asyncHandler(async (request, _respon
 
   next();
 });
+
+export const optionalAuthenticate: RequestHandler = asyncHandler(async (request, _response, next) => {
+  const authorization = request.header('authorization');
+  if (!authorization?.startsWith('Bearer ')) {
+    return next();
+  }
+
+  try {
+    const payload = tokenService.verifyAccessToken(authorization.slice('Bearer '.length));
+    const user = await userRepository.findAuthenticatedById(payload.sub);
+    if (user && user.isActive) {
+      request.auth = {
+        userId: user.id,
+        universityId: user.universityId,
+        role: user.role.name,
+        permissions: user.role.permissions.map((permission) => permission.key),
+        isDemo: user.isDemo,
+      };
+      request.tenant = {
+        id: user.university.id,
+        slug: user.university.slug,
+        domain: user.university.domain,
+      };
+    }
+  } catch {
+    // Graceful fallback for optional authentication
+  }
+
+  next();
+});
