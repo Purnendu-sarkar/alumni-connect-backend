@@ -3,11 +3,13 @@ import { jobModerationService } from '../../src/services/job/job-moderation.serv
 import { jobRepository } from '../../src/repositories/job.repository.js';
 import { jobModerationRepository } from '../../src/repositories/job-moderation.repository.js';
 import { cacheService } from '../../src/services/cache/cache.service.js';
+import { notificationService } from '../../src/services/notification/notification.service.js';
 
 describe('Job Moderation & Review Unit Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(cacheService, 'bumpVersion').mockResolvedValue(1);
+    vi.spyOn(notificationService, 'notifyUser').mockResolvedValue({} as any);
   });
 
   describe('Atomic Claim Concurrency Lock', () => {
@@ -73,6 +75,10 @@ describe('Job Moderation & Review Unit Tests', () => {
         .spyOn(jobModerationRepository, 'createRecord')
         .mockResolvedValue({} as any);
 
+      const notifySpy = vi
+        .spyOn(notificationService, 'notifyUser')
+        .mockResolvedValue({} as any);
+
       await jobModerationService.approveJob('job-under-review-1', 'mod-user-1', 'MODERATOR', 'uni-1');
 
       expect(updateSpy).toHaveBeenCalledWith(
@@ -84,6 +90,12 @@ describe('Job Moderation & Review Unit Tests', () => {
       expect(recordSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'APPROVE',
+        }),
+      );
+      expect(notifySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'JOB_APPROVED',
+          link: '/alumni/jobs/my-jobs',
         }),
       );
     });
@@ -107,6 +119,10 @@ describe('Job Moderation & Review Unit Tests', () => {
 
       const recordSpy = vi
         .spyOn(jobModerationRepository, 'createRecord')
+        .mockResolvedValue({} as any);
+
+      const notifySpy = vi
+        .spyOn(notificationService, 'notifyUser')
         .mockResolvedValue({} as any);
 
       await jobModerationService.rejectJob(
@@ -133,6 +149,12 @@ describe('Job Moderation & Review Unit Tests', () => {
           reasonCode: 'SCAM_OR_SUSPICIOUS',
         }),
       );
+      expect(notifySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'JOB_REJECTED',
+          link: '/alumni/jobs/my-jobs',
+        }),
+      );
     });
   });
 
@@ -156,6 +178,10 @@ describe('Job Moderation & Review Unit Tests', () => {
         .spyOn(jobModerationRepository, 'createRecord')
         .mockResolvedValue({} as any);
 
+      const notifySpy = vi
+        .spyOn(notificationService, 'notifyUser')
+        .mockResolvedValue({} as any);
+
       await jobModerationService.requestChanges(
         'job-under-review-3',
         'mod-user-1',
@@ -176,6 +202,12 @@ describe('Job Moderation & Review Unit Tests', () => {
       expect(recordSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'REQUEST_CHANGES',
+        }),
+      );
+      expect(notifySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'JOB_CHANGES_REQUESTED',
+          link: '/alumni/jobs/my-jobs',
         }),
       );
     });

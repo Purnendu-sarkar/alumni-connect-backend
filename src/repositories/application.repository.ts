@@ -55,6 +55,11 @@ export const applicationRepository = {
             position: true,
             avatarUrl: true,
             verified: true,
+            role: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         history: {

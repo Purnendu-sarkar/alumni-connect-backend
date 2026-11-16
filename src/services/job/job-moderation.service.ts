@@ -162,7 +162,7 @@ export const jobModerationService = {
       type: 'JOB_APPROVED',
       title: 'Job Opportunity Approved & Published',
       body: `Your job listing "${job.title}" at ${job.company} is now live on the campus job board!`,
-      link: `/alumni/my-jobs`,
+      link: `/alumni/jobs/my-jobs`,
     });
 
     await auditLogRepository.record({
@@ -218,7 +218,7 @@ export const jobModerationService = {
       type: 'JOB_REJECTED',
       title: 'Job Submission Declined',
       body: `Your job listing "${job.title}" was declined: ${input.reason.trim()}`,
-      link: `/alumni/my-jobs`,
+      link: `/alumni/jobs/my-jobs`,
     });
 
     await auditLogRepository.record({
@@ -272,7 +272,7 @@ export const jobModerationService = {
       type: 'JOB_CHANGES_REQUESTED',
       title: 'Action Required: Job Listing Revisions Needed',
       body: `Feedback received on "${job.title}": ${input.notes.trim()}. Please edit and resubmit.`,
-      link: `/alumni/my-jobs`,
+      link: `/alumni/jobs/my-jobs`,
     });
 
     await auditLogRepository.record({
@@ -364,7 +364,7 @@ export const jobModerationService = {
       type: 'MODERATION_RESULT',
       title: `Job Listing Status Updated: ${targetStatus}`,
       body: `Your job listing "${job.title}" status was administratively changed to ${targetStatus}: ${input.reason}`,
-      link: `/alumni/my-jobs`,
+      link: `/alumni/jobs/my-jobs`,
     });
 
     await auditLogRepository.record({

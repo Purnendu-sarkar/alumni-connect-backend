@@ -256,12 +256,15 @@ export const applicationService = {
       REJECTED: `Thank you for your interest in "${job.title}" at ${job.company}. The employer has decided to pursue other candidates at this time.`,
     };
 
+    const applicantRole = (app.applicant as any)?.role?.name;
+    const candidateLink = applicantRole === 'ALUMNI' ? '/alumni/applications' : '/student/applications';
+
     await notificationService.notifyUser({
       userId: app.applicantId,
       type: 'APPLICATION_UPDATE',
       title: statusTitles[toStatus] || 'Application Status Updated',
       body: statusBodies[toStatus] || `Your application status for "${job.title}" was updated to ${toStatus}.`,
-      link: '/student/applications',
+      link: candidateLink,
     });
 
     await auditLogRepository.record({

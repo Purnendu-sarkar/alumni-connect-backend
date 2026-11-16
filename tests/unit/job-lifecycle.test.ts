@@ -5,11 +5,13 @@ import { jobRepository } from '../../src/repositories/job.repository.js';
 import { applicationRepository } from '../../src/repositories/application.repository.js';
 import { jobModerationRepository } from '../../src/repositories/job-moderation.repository.js';
 import { cacheService } from '../../src/services/cache/cache.service.js';
+import { notificationService } from '../../src/services/notification/notification.service.js';
 
 describe('Job Lifecycle & Applications Unit Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(cacheService, 'bumpVersion').mockResolvedValue(1);
+    vi.spyOn(notificationService, 'notifyUser').mockResolvedValue({} as any);
   });
 
   describe('Job Anti-Self-Apply Guard', () => {
@@ -111,6 +113,92 @@ describe('Job Lifecycle & Applications Unit Tests', () => {
         expect.objectContaining({
           action: 'SUBMIT',
           ownerVisibleNote: expect.stringMatching(/Reverted to moderation queue/i),
+        }),
+      );
+    });
+  });
+
+  describe('Application Status Update Notification Routing', () => {
+    it('dispatches notification with /student/applications when applicant is a student', async () => {
+      vi.spyOn(jobRepository, 'findOwnerJobById').mockResolvedValue({
+        id: 'job-1',
+        title: 'Software Engineer',
+        company: 'Tech Corp',
+        postedById: 'owner-1',
+      } as any);
+
+      vi.spyOn(applicationRepository, 'findById').mockResolvedValue({
+        id: 'app-1',
+        jobId: 'job-1',
+        applicantId: 'student-1',
+        status: 'SUBMITTED',
+        applicant: {
+          id: 'student-1',
+          role: { name: 'STUDENT' },
+        },
+      } as any);
+
+      vi.spyOn(applicationRepository, 'updateStatusWithHistory').mockResolvedValue({} as any);
+
+      const notifySpy = vi
+        .spyOn(notificationService, 'notifyUser')
+        .mockResolvedValue({} as any);
+
+      await applicationService.updateApplicationStatus(
+        'job-1',
+        'app-1',
+        'owner-1',
+        'uni-1',
+        'SHORTLISTED' as any,
+      );
+
+      expect(notifySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'student-1',
+          type: 'APPLICATION_UPDATE',
+          link: '/student/applications',
+        }),
+      );
+    });
+
+    it('dispatches notification with /alumni/applications when applicant is an alumni', async () => {
+      vi.spyOn(jobRepository, 'findOwnerJobById').mockResolvedValue({
+        id: 'job-1',
+        title: 'Senior Architect',
+        company: 'Tech Corp',
+        postedById: 'owner-1',
+      } as any);
+
+      vi.spyOn(applicationRepository, 'findById').mockResolvedValue({
+        id: 'app-2',
+        jobId: 'job-1',
+        applicantId: 'alumni-applicant-1',
+        status: 'SUBMITTED',
+        applicant: {
+          id: 'alumni-applicant-1',
+          role: { name: 'ALUMNI' },
+        },
+      } as any);
+
+      vi.spyOn(applicationRepository, 'updateStatusWithHistory').mockResolvedValue({} as any);
+
+      const notifySpy = vi
+        .spyOn(notificationService, 'notifyUser')
+        .mockResolvedValue({} as any);
+
+      await applicationService.updateApplicationStatus(
+        'job-1',
+        'app-2',
+        'owner-1',
+        'uni-1',
+        'ACCEPTED' as any,
+      );
+
+      expect(notifySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'alumni-applicant-1',
+          type: 'APPLICATION_UPDATE',
+          link: '/alumni/applications',
         }),
       );
     });
