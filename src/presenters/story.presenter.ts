@@ -54,6 +54,7 @@ export interface AdminStoryDetailDto extends StoryDetailDto {
   embeddedMediaPublicIds: string[];
   ownerVisibleNote: string | null;
   internalNote: string | null;
+  reviewerId: string | null;
   claimedAt: string | null;
   reviewer: {
     id: string;
@@ -71,7 +72,7 @@ export interface AdminStoryDetailDto extends StoryDetailDto {
       id: string;
       name: string;
       avatarUrl: string | null;
-    };
+    } | null;
   }>;
 }
 
@@ -145,10 +146,11 @@ export const storyPresenter = {
     const detail = this.toStoryDetail(story, viewer);
     return {
       ...detail,
-      coverImagePublicId: story.coverImagePublicId,
+      coverImagePublicId: story.coverImagePublicId ?? null,
       embeddedMediaPublicIds: story.embeddedMediaPublicIds || [],
-      ownerVisibleNote: story.ownerVisibleNote,
-      internalNote: story.internalNote,
+      ownerVisibleNote: story.ownerVisibleNote ?? null,
+      internalNote: story.internalNote ?? null,
+      reviewerId: story.reviewerId || story.reviewer?.id || null,
       claimedAt: story.claimedAt ? story.claimedAt.toISOString() : null,
       reviewer: story.reviewer
         ? {
@@ -161,14 +163,16 @@ export const storyPresenter = {
       moderationHistory: (story.moderationHistory || []).map((h: any) => ({
         id: h.id,
         action: h.action,
-        reasonCode: h.reasonCode,
-        note: h.note,
+        reasonCode: h.reasonCode ?? null,
+        note: h.note ?? null,
         createdAt: h.createdAt.toISOString(),
-        moderator: {
-          id: h.moderator.id,
-          name: h.moderator.name,
-          avatarUrl: h.moderator.avatarUrl,
-        },
+        moderator: h.moderator
+          ? {
+              id: h.moderator.id,
+              name: h.moderator.name,
+              avatarUrl: h.moderator.avatarUrl,
+            }
+          : null,
       })),
     };
   },

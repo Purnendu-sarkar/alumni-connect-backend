@@ -4,6 +4,8 @@ import { storyService } from '../../src/services/story/story.service.js';
 import { storyModerationService } from '../../src/services/story/story-moderation.service.js';
 import { storyRepository } from '../../src/repositories/story.repository.js';
 import { storyModerationRepository } from '../../src/repositories/story-moderation.repository.js';
+import { auditLogRepository } from '../../src/repositories/audit-log.repository.js';
+import { universityRepository } from '../../src/repositories/university.repository.js';
 import { cacheService } from '../../src/services/cache/cache.service.js';
 import { notificationService } from '../../src/services/notification/notification.service.js';
 import { ApiError } from '../../src/errors/api-error.js';
@@ -11,6 +13,7 @@ import { ApiError } from '../../src/errors/api-error.js';
 describe('Feature 10: Success Stories Unit Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(auditLogRepository, 'record').mockResolvedValue({} as any);
   });
 
   describe('Rich-Media HTML Sanitizer & Security', () => {
@@ -64,6 +67,26 @@ describe('Feature 10: Success Stories Unit Tests', () => {
       expect(sanitized).not.toContain('javascript:');
       expect(sanitized).not.toContain('onerror');
       expect(sanitized).toContain('https://res.cloudinary.com/alumni-cloud/safe.jpg');
+    });
+
+    it('neutralizes attribute breakout via single-quoted type on source tag and strips media when cloudName is empty', () => {
+      const breakoutHtml = `
+        <figure>
+          <video controls>
+            <source src="https://res.cloudinary.com/alumni-cloud/video/upload/demo.mp4" type='video/mp4" onerror="alert(1)' />
+          </video>
+        </figure>
+      `;
+
+      const sanitized = sanitizeStoryHtml(breakoutHtml, cloudName);
+      expect(sanitized).toContain('type="video/mp4"');
+      expect(sanitized).not.toContain('onerror');
+      expect(sanitized).not.toContain('alert(1)');
+
+      const strippedNoCloud = sanitizeStoryHtml(breakoutHtml, '');
+      expect(strippedNoCloud).not.toContain('<video');
+      expect(strippedNoCloud).not.toContain('<source');
+      expect(strippedNoCloud).not.toContain('res.cloudinary.com');
     });
 
     it('accurately calculates estimated reading time', () => {
@@ -157,6 +180,7 @@ describe('Feature 10: Success Stories Unit Tests', () => {
 
       const bumpSpy = vi.spyOn(cacheService, 'bumpVersion').mockResolvedValue(1);
       const modRecordSpy = vi.spyOn(storyModerationRepository, 'record').mockResolvedValue({} as any);
+      const notifyRolesSpy = vi.spyOn(notificationService, 'notifyRoles').mockResolvedValue([]);
 
       vi.spyOn(storyRepository, 'update').mockImplementation(async (_id: string, data: any) => ({
         id: 'story-pub-edit',
@@ -187,7 +211,34 @@ describe('Feature 10: Success Stories Unit Tests', () => {
 
       expect(bumpSpy).toHaveBeenCalledWith('stories');
       expect(modRecordSpy).toHaveBeenCalled();
+      expect(notifyRolesSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roles: ['MODERATOR', 'SUPER_ADMIN'],
+          link: '/moderator/content',
+        })
+      );
       expect(updated.title).toBe('Drastically Modified Title');
+    });
+
+    it('resolves canonical university for unauthenticated public story listing', async () => {
+      vi.spyOn(universityRepository, 'findCanonical').mockResolvedValue({
+        id: 'canonical-uni-1',
+        name: 'North Western University',
+        slug: 'nwu',
+        domain: 'nwu.edu',
+        isActive: true,
+      });
+      vi.spyOn(cacheService, 'getVersion').mockResolvedValue(1);
+      vi.spyOn(cacheService, 'get').mockResolvedValue(null);
+      vi.spyOn(cacheService, 'set').mockResolvedValue(undefined);
+      const findSpy = vi.spyOn(storyRepository, 'findManyPublished').mockResolvedValue({
+        stories: [],
+        total: 0,
+      });
+
+      const res = await storyService.listPublishedStories('', {}, { page: 1, limit: 12 });
+      expect(findSpy).toHaveBeenCalledWith('canonical-uni-1', {}, { page: 1, limit: 12 });
+      expect(res.data).toEqual([]);
     });
   });
 
@@ -320,6 +371,43 @@ describe('Feature 10: Success Stories Unit Tests', () => {
           action: 'REJECT',
         })
       );
+    });
+
+    it('prevents another moderator from approving a story claimed by a different moderator', async () => {
+      vi.spyOn(storyRepository, 'findById').mockResolvedValue({
+        id: 'story-owned-by-other',
+        universityId,
+        authorId: 'author-30',
+        title: 'Claimed Story',
+        status: 'UNDER_REVIEW',
+        reviewerId: 'other-moderator-99',
+      } as any);
+
+      await expect(
+        storyModerationService.approveStory('story-owned-by-other', universityId, moderatorId, 'MODERATOR')
+      ).rejects.toThrow(ApiError);
+    });
+
+    it('blocks moderating a DRAFT story that has not been submitted', async () => {
+      vi.spyOn(storyRepository, 'findById').mockResolvedValue({
+        id: 'story-draft-guard',
+        universityId,
+        authorId: 'author-31',
+        title: 'Draft Story',
+        status: 'DRAFT',
+        reviewerId: null,
+      } as any);
+
+      await expect(
+        storyModerationService.rejectStory(
+          'story-draft-guard',
+          universityId,
+          moderatorId,
+          'Cannot reject a private draft story.',
+          undefined,
+          'MODERATOR'
+        )
+      ).rejects.toThrow(ApiError);
     });
   });
 });

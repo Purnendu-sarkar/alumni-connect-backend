@@ -76,9 +76,15 @@ export const adminStoryController = {
   approve: asyncHandler(async (request: Request, response: Response) => {
     const { id } = request.params;
     const moderatorId = request.auth!.userId;
+    const moderatorRole = request.auth!.role;
     const universityId = request.auth!.universityId;
 
-    const story = await storyModerationService.approveStory(id as string, universityId, moderatorId);
+    const story = await storyModerationService.approveStory(
+      id as string,
+      universityId,
+      moderatorId,
+      moderatorRole
+    );
     return sendSuccess(response, {
       message: 'Story approved and published.',
       data: story,
@@ -88,6 +94,7 @@ export const adminStoryController = {
   reject: asyncHandler(async (request: Request, response: Response) => {
     const { id } = request.params;
     const moderatorId = request.auth!.userId;
+    const moderatorRole = request.auth!.role;
     const universityId = request.auth!.universityId;
     const body = request.body as z.infer<typeof moderationDecisionSchema>;
 
@@ -96,7 +103,8 @@ export const adminStoryController = {
       universityId,
       moderatorId,
       body.reason,
-      body.internalNote
+      body.internalNote,
+      moderatorRole
     );
 
     return sendSuccess(response, {
@@ -108,6 +116,7 @@ export const adminStoryController = {
   requestChanges: asyncHandler(async (request: Request, response: Response) => {
     const { id } = request.params;
     const moderatorId = request.auth!.userId;
+    const moderatorRole = request.auth!.role;
     const universityId = request.auth!.universityId;
     const body = request.body as z.infer<typeof requestChangesSchema>;
 
@@ -116,7 +125,8 @@ export const adminStoryController = {
       universityId,
       moderatorId,
       body.notes,
-      body.internalNote
+      body.internalNote,
+      moderatorRole
     );
 
     return sendSuccess(response, {

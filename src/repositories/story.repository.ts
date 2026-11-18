@@ -12,7 +12,7 @@ export interface StoryFilterParams {
 
 export interface AdminStoryFilterParams {
   q?: string;
-  status?: StoryStatus | 'ALL';
+  status?: StoryStatus | 'ALL' | 'PENDING_QUEUE';
   category?: StoryCategory | 'ALL';
   authorId?: string;
 }
@@ -224,7 +224,9 @@ export const storyRepository = {
       deletedAt: null,
     };
 
-    if (filters.status && filters.status !== 'ALL') {
+    if (filters.status === 'PENDING_QUEUE') {
+      where.status = { in: ['SUBMITTED', 'UNDER_REVIEW'] };
+    } else if (filters.status && filters.status !== 'ALL') {
       where.status = filters.status;
     }
 
@@ -266,6 +268,15 @@ export const storyRepository = {
           moderationHistory: {
             take: 1,
             orderBy: { createdAt: 'desc' },
+            include: {
+              moderator: {
+                select: {
+                  id: true,
+                  name: true,
+                  avatarUrl: true,
+                },
+              },
+            },
           },
         },
       }),
@@ -293,6 +304,31 @@ export const storyRepository = {
       include: {
         author: {
           select: authorSelect,
+        },
+        reviewer: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            role: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        moderationHistory: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            moderator: {
+              select: {
+                id: true,
+                name: true,
+                avatarUrl: true,
+              },
+            },
+          },
         },
       },
     });

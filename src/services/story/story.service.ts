@@ -6,6 +6,7 @@ import { ApiError } from '../../errors/api-error.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { storyRepository, type StoryFilterParams } from '../../repositories/story.repository.js';
 import { storyModerationRepository } from '../../repositories/story-moderation.repository.js';
+import { universityRepository } from '../../repositories/university.repository.js';
 import { cacheService } from '../cache/cache.service.js';
 import { storyPresenter, type StoryViewerContext } from '../../presenters/story.presenter.js';
 import { notificationService } from '../notification/notification.service.js';
@@ -49,10 +50,21 @@ function generateSlug(title: string): string {
 async function destroyCloudinaryAsset(publicId: string) {
   if (!publicId) return;
   try {
-    await cloudinary.uploader.destroy(publicId);
+    const result = await cloudinary.uploader.destroy(publicId);
+    if (result?.result === 'not found') {
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+    }
   } catch {
-    // Ignore Cloudinary deletion error
+    // Ignore Cloudinary deletion error so DB transaction never fails
   }
+}
+
+async function resolveUniversityId(universityId?: string): Promise<string> {
+  if (universityId && universityId.trim()) {
+    return universityId.trim();
+  }
+  const canonical = await universityRepository.findCanonical();
+  return canonical?.id || '';
 }
 
 export const storyService = {
@@ -62,12 +74,13 @@ export const storyService = {
     pagination: PaginationInput,
     viewer?: StoryViewerContext
   ) {
+    const resolvedUniversityId = await resolveUniversityId(universityId);
     const version = await cacheService.getVersion('stories');
     const queryHash = crypto
       .createHash('md5')
       .update(JSON.stringify(filters) + JSON.stringify(pagination))
       .digest('hex');
-    const cacheKey = `stories:v${version}:${universityId}:${queryHash}`;
+    const cacheKey = `stories:v${version}:${resolvedUniversityId}:${queryHash}`;
 
     interface CachedResult {
       stories: any[];
@@ -78,7 +91,7 @@ export const storyService = {
 
     if (!cached) {
       const { stories, total } = await storyRepository.findManyPublished(
-        universityId,
+        resolvedUniversityId,
         filters,
         pagination
       );
@@ -95,9 +108,10 @@ export const storyService = {
   },
 
   async getStoryDetail(idOrSlug: string, universityId: string, viewer?: StoryViewerContext) {
+    const resolvedUniversityId = await resolveUniversityId(universityId);
     let story = await storyRepository.findById(idOrSlug);
-    if (!story) {
-      story = await storyRepository.findBySlug(idOrSlug, universityId);
+    if (!story && resolvedUniversityId) {
+      story = await storyRepository.findBySlug(idOrSlug, resolvedUniversityId);
     }
 
     if (!story) {
@@ -193,6 +207,15 @@ export const storyService = {
         targetType: 'SUCCESS_STORY',
         targetId: story.id,
         metadata: { title: story.title, category: story.category },
+      });
+
+      await notificationService.notifyRoles({
+        universityId,
+        roles: ['MODERATOR', 'SUPER_ADMIN'],
+        type: 'STORY_REVIEW',
+        title: 'New Success Story Submitted',
+        body: `"${story.title}" has been submitted for editorial review.`,
+        link: '/moderator/content',
       });
     } else {
       await auditLogRepository.record({
@@ -335,6 +358,27 @@ export const storyService = {
 
     const updated = await storyRepository.update(id, updateData);
 
+    const triggeredSubmission = Boolean(input.submitNow || (existing.status === 'PUBLISHED' && needsReReview));
+    if (!triggeredSubmission) {
+      await auditLogRepository.record({
+        universityId,
+        actorId: authorId,
+        action: 'STORY_UPDATED',
+        targetType: 'SUCCESS_STORY',
+        targetId: id,
+        metadata: { title: updated.title, status: updated.status },
+      });
+    } else {
+      await notificationService.notifyRoles({
+        universityId,
+        roles: ['MODERATOR', 'SUPER_ADMIN'],
+        type: 'STORY_REVIEW',
+        title: 'Success Story Submitted for Review',
+        body: `"${updated.title}" is ready for editorial verification.`,
+        link: '/moderator/content',
+      });
+    }
+
     return storyPresenter.toAuthorStoryDetail(updated, { userId: authorId });
   },
 
@@ -382,6 +426,15 @@ export const storyService = {
       targetType: 'SUCCESS_STORY',
       targetId: id,
       metadata: { title: updated.title },
+    });
+
+    await notificationService.notifyRoles({
+      universityId,
+      roles: ['MODERATOR', 'SUPER_ADMIN'],
+      type: 'STORY_REVIEW',
+      title: 'New Success Story Submitted',
+      body: `"${updated.title}" has been submitted for editorial review.`,
+      link: '/moderator/content',
     });
 
     return storyPresenter.toAuthorStoryDetail(updated, { userId: authorId });

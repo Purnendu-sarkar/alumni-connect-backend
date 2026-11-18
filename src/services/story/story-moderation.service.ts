@@ -12,9 +12,38 @@ import { toPageMeta, type PaginationInput } from '../../utils/pagination.js';
 async function destroyCloudinaryAsset(publicId: string) {
   if (!publicId) return;
   try {
-    await cloudinary.uploader.destroy(publicId);
+    const result = await cloudinary.uploader.destroy(publicId);
+    if (result?.result === 'not found') {
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+    }
   } catch {
-    // Ignore Cloudinary error
+    // Ignore Cloudinary deletion error so DB transaction never fails
+  }
+}
+
+function assertModerationEligibility(
+  existing: { status: StoryStatus; reviewerId?: string | null },
+  moderatorId: string,
+  moderatorRole: string = 'MODERATOR'
+) {
+  if (existing.status !== 'SUBMITTED' && existing.status !== 'UNDER_REVIEW') {
+    throw new ApiError(
+      400,
+      'Only submitted or under-review stories can be moderated.',
+      'INVALID_STATE'
+    );
+  }
+
+  if (
+    existing.reviewerId &&
+    existing.reviewerId !== moderatorId &&
+    moderatorRole !== 'SUPER_ADMIN'
+  ) {
+    throw new ApiError(
+      409,
+      'This story is currently claimed by another reviewer.',
+      'ALREADY_CLAIMED'
+    );
   }
 }
 
@@ -108,13 +137,20 @@ export const storyModerationService = {
     return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: 'MODERATOR' });
   },
 
-  async approveStory(storyId: string, universityId: string, moderatorId: string) {
+  async approveStory(
+    storyId: string,
+    universityId: string,
+    moderatorId: string,
+    moderatorRole: string = 'MODERATOR'
+  ) {
     const existing = await storyRepository.findById(storyId);
     if (!existing) throw ApiError.notFound('Success Story');
 
     if (existing.status === 'PUBLISHED') {
       throw new ApiError(400, 'Story is already published.', 'ALREADY_PUBLISHED');
     }
+
+    assertModerationEligibility(existing, moderatorId, moderatorRole);
 
     const updated = await storyRepository.update(storyId, {
       status: 'PUBLISHED',
@@ -149,7 +185,7 @@ export const storyModerationService = {
       metadata: { title: updated.title },
     });
 
-    return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: 'MODERATOR' });
+    return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: moderatorRole });
   },
 
   async rejectStory(
@@ -157,10 +193,13 @@ export const storyModerationService = {
     universityId: string,
     moderatorId: string,
     reason: string,
-    internalNote?: string
+    internalNote?: string,
+    moderatorRole: string = 'MODERATOR'
   ) {
     const existing = await storyRepository.findById(storyId);
     if (!existing) throw ApiError.notFound('Success Story');
+
+    assertModerationEligibility(existing, moderatorId, moderatorRole);
 
     const updated = await storyRepository.update(storyId, {
       status: 'REJECTED',
@@ -193,7 +232,7 @@ export const storyModerationService = {
       metadata: { title: updated.title, reason },
     });
 
-    return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: 'MODERATOR' });
+    return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: moderatorRole });
   },
 
   async requestChanges(
@@ -201,10 +240,13 @@ export const storyModerationService = {
     universityId: string,
     moderatorId: string,
     notes: string,
-    internalNote?: string
+    internalNote?: string,
+    moderatorRole: string = 'MODERATOR'
   ) {
     const existing = await storyRepository.findById(storyId);
     if (!existing) throw ApiError.notFound('Success Story');
+
+    assertModerationEligibility(existing, moderatorId, moderatorRole);
 
     const updated = await storyRepository.update(storyId, {
       status: 'DRAFT',
@@ -239,7 +281,7 @@ export const storyModerationService = {
       metadata: { title: updated.title, notes },
     });
 
-    return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: 'MODERATOR' });
+    return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: moderatorRole });
   },
 
   async unpublishStoryByModerator(
@@ -255,9 +297,11 @@ export const storyModerationService = {
       throw new ApiError(400, 'Only published stories can be unpublished.', 'INVALID_STATE');
     }
 
+    const effectiveReason = reason?.trim() || 'Unpublished by editorial moderator';
+
     const updated = await storyRepository.update(storyId, {
       status: 'UNPUBLISHED',
-      ownerVisibleNote: reason?.trim() || 'Unpublished by editorial moderator',
+      ownerVisibleNote: effectiveReason,
       version: { increment: 1 },
     });
 
@@ -267,7 +311,15 @@ export const storyModerationService = {
       storyId,
       moderatorId,
       action: 'UNPUBLISH',
-      note: reason?.trim() || 'Unpublished by moderator',
+      note: effectiveReason,
+    });
+
+    await notificationService.notifyUser({
+      userId: existing.authorId,
+      type: 'STORY_REVIEW',
+      title: 'Success Story Unpublished',
+      body: `Your story "${existing.title}" was unpublished by the editorial team: ${effectiveReason}`,
+      link: '/alumni/stories/my-stories',
     });
 
     await auditLogRepository.record({
@@ -276,7 +328,7 @@ export const storyModerationService = {
       action: 'STORY_UNPUBLISHED',
       targetType: 'SUCCESS_STORY',
       targetId: storyId,
-      metadata: { title: updated.title, reason },
+      metadata: { title: updated.title, reason: effectiveReason },
     });
 
     return storyPresenter.toAdminStoryDetail(updated, { userId: moderatorId, role: 'MODERATOR' });
@@ -308,7 +360,7 @@ export const storyModerationService = {
     await auditLogRepository.record({
       universityId,
       actorId: moderatorId,
-      action: 'STORY_PUBLISHED',
+      action: 'STORY_RESTORED',
       targetType: 'SUCCESS_STORY',
       targetId: storyId,
       metadata: { title: updated.title },
@@ -329,6 +381,7 @@ export const storyModerationService = {
 
     const updated = await storyRepository.update(storyId, {
       status,
+      ...(status === 'PUBLISHED' ? { publishedAt: existing.publishedAt || new Date() } : {}),
       ownerVisibleNote: `Administrative override: ${reason.trim()}`,
       version: { increment: 1 },
     });

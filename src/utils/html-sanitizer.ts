@@ -118,6 +118,17 @@ export function calculateReadingTime(html: string): number {
   return Math.max(1, Math.ceil(words / 200));
 }
 
+const ALLOWED_VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg']);
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function sanitizeStoryHtml(rawHtml: string, cloudName?: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return '';
 
@@ -136,9 +147,10 @@ export function sanitizeStoryHtml(rawHtml: string, cloudName?: string): string {
   // 2. Strip HTML comments
   sanitized = sanitized.replace(/<!--[\s\S]*?-->/g, '');
 
-  const validCloudinaryPrefix = cloudName
-    ? `https://res.cloudinary.com/${cloudName}/`
-    : 'https://res.cloudinary.com/';
+  const trimmedCloudName = cloudName?.trim();
+  const validCloudinaryPrefix = trimmedCloudName
+    ? `https://res.cloudinary.com/${trimmedCloudName}/`
+    : null;
 
   // 3. Process tags
   sanitized = sanitized.replace(/<\/?([a-zA-Z0-9_-]+)([^>]*)>/gi, (fullMatch, tagName, rawAttrs) => {
@@ -150,6 +162,7 @@ export function sanitizeStoryHtml(rawHtml: string, cloudName?: string): string {
 
     if (fullMatch.startsWith('</')) {
       if (['img', 'br', 'hr', 'source'].includes(tagLower)) return '';
+      if (tagLower === 'video' && !validCloudinaryPrefix) return '';
       return `</${tagLower}>`;
     }
 
@@ -168,25 +181,30 @@ export function sanitizeStoryHtml(rawHtml: string, cloudName?: string): string {
       } catch {
         href = '#';
       }
-      return `<a href="${encodeURI(href)}" target="_blank" rel="noopener noreferrer">`;
+      return `<a href="${escapeHtmlAttr(encodeURI(href))}" target="_blank" rel="noopener noreferrer">`;
     }
 
     if (tagLower === 'img') {
+      if (!validCloudinaryPrefix) return '';
+
       const srcMatch = rawAttrs.match(/src=(["'])(.*?)\1/i) || rawAttrs.match(/src=([^\s>]+)/i);
       const altMatch = rawAttrs.match(/alt=(["'])(.*?)\1/i) || rawAttrs.match(/alt=([^\s>]+)/i);
 
       const src = srcMatch ? (srcMatch[2] || srcMatch[1]).trim() : '';
-      const alt = altMatch ? (altMatch[2] || altMatch[1]).trim().replace(/"/g, '&quot;') : 'Story illustration';
+      const rawAlt = altMatch ? (altMatch[2] || altMatch[1]).trim() : 'Story illustration';
+      const alt = escapeHtmlAttr(rawAlt || 'Story illustration');
 
       // Enforce verified Cloudinary domain only
       if (!src || !src.startsWith(validCloudinaryPrefix)) {
         return '';
       }
 
-      return `<img src="${encodeURI(src)}" alt="${alt}" class="rounded-xl max-w-full my-6 shadow-sm" loading="lazy" />`;
+      return `<img src="${escapeHtmlAttr(encodeURI(src))}" alt="${alt}" class="rounded-xl max-w-full my-6 shadow-sm" loading="lazy" />`;
     }
 
     if (tagLower === 'video') {
+      if (!validCloudinaryPrefix) return '';
+
       const srcMatch = rawAttrs.match(/src=(["'])(.*?)\1/i) || rawAttrs.match(/src=([^\s>]+)/i);
       const src = srcMatch ? (srcMatch[2] || srcMatch[1]).trim() : '';
 
@@ -194,23 +212,26 @@ export function sanitizeStoryHtml(rawHtml: string, cloudName?: string): string {
         if (!src.startsWith(validCloudinaryPrefix)) {
           return '';
         }
-        return `<video controls preload="metadata" playsinline class="w-full rounded-xl my-6 shadow-sm aspect-video bg-black" src="${encodeURI(src)}">`;
+        return `<video controls preload="metadata" playsinline class="w-full rounded-xl my-6 shadow-sm aspect-video bg-black" src="${escapeHtmlAttr(encodeURI(src))}">`;
       }
 
       return `<video controls preload="metadata" playsinline class="w-full rounded-xl my-6 shadow-sm aspect-video bg-black">`;
     }
 
     if (tagLower === 'source') {
+      if (!validCloudinaryPrefix) return '';
+
       const srcMatch = rawAttrs.match(/src=(["'])(.*?)\1/i) || rawAttrs.match(/src=([^\s>]+)/i);
       const typeMatch = rawAttrs.match(/type=(["'])(.*?)\1/i) || rawAttrs.match(/type=([^\s>]+)/i);
       const src = srcMatch ? (srcMatch[2] || srcMatch[1]).trim() : '';
-      const type = typeMatch ? (typeMatch[2] || typeMatch[1]).trim() : 'video/mp4';
+      const rawType = typeMatch ? (typeMatch[2] || typeMatch[1]).trim().toLowerCase() : 'video/mp4';
+      const safeType = ALLOWED_VIDEO_MIME_TYPES.has(rawType) ? rawType : 'video/mp4';
 
       if (!src || !src.startsWith(validCloudinaryPrefix)) {
         return '';
       }
 
-      return `<source src="${encodeURI(src)}" type="${type}" />`;
+      return `<source src="${escapeHtmlAttr(encodeURI(src))}" type="${safeType}" />`;
     }
 
     if (tagLower === 'figure') {

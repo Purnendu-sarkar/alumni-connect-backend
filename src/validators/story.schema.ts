@@ -43,7 +43,7 @@ export const storyQuerySchema = z.object({
 
 export const adminStoryQuerySchema = z.object({
   q: z.string().optional(),
-  status: z.union([storyStatusEnum, z.literal('ALL')]).optional(),
+  status: z.union([storyStatusEnum, z.literal('ALL'), z.literal('PENDING_QUEUE')]).optional(),
   category: z.union([storyCategoryEnum, z.literal('ALL')]).optional(),
   authorId: z.string().optional(),
   page: z.coerce.number().int().positive().default(1),
