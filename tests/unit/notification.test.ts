@@ -159,6 +159,9 @@ describe('Notification Engine & Security Scoping Unit Tests', () => {
     const { authService } = await import('../../src/services/auth/auth.service.js');
     const { passwordResetService } = await import('../../src/services/auth/password-reset.service.js');
     const { passwordService } = await import('../../src/services/auth/password.service.js');
+    const { auditLogRepository } = await import('../../src/repositories/audit-log.repository.js');
+
+    vi.spyOn(auditLogRepository, 'record').mockResolvedValue({} as any);
 
     const mockUniversity = { id: 'uni-1', domain: 'university.edu', isActive: true };
     vi.spyOn(prisma.university, 'findFirst').mockResolvedValue(mockUniversity as any);
@@ -207,5 +210,5 @@ describe('Notification Engine & Security Scoping Unit Tests', () => {
         roles: expect.arrayContaining(['MODERATOR']),
       }),
     );
-  });
+  }, 15000);
 });

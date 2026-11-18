@@ -214,6 +214,7 @@ model University {
   events           Event[]
   announcements    Announcement[]
   contents         Content[]
+  stories          SuccessStory[]
   reports          Report[]
   mediaAssets      MediaAsset[]
   adSlots          AdSlot[]
@@ -293,6 +294,9 @@ model User {
   eventRsvps          EventRsvp[]         @relation("RsvpUser")
   announcements       Announcement[]      @relation("AnnouncementAuthor")
   contentsCreated     Content[]           @relation("ContentCreator")
+  authoredStories     SuccessStory[]      @relation("StoryAuthor")
+  reviewedStories     SuccessStory[]      @relation("StoryReviewer")
+  storyModerations    StoryModerationRecord[] @relation("StoryModerator")
   mediaUploaded       MediaAsset[]        @relation("MediaUploader")
   uploadedFiles       UploadedFile[]
   analyticsEvents     AnalyticsEvent[]
@@ -854,5 +858,91 @@ model UploadedFile {
   @@index([userId, purpose])
   @@map("uploaded_files")
 }
+
+enum StoryStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+  UNPUBLISHED
+}
+
+enum StoryCategory {
+  CAREER_MILESTONE
+  ENTREPRENEURSHIP
+  TECH_INNOVATION
+  RESEARCH_ACADEMIA
+  DESIGN_PRODUCT
+  CAMPUS_NOSTALGIA
+  GENERAL_INSIGHT
+}
+
+enum StoryModerationAction {
+  SUBMIT
+  WITHDRAW
+  CLAIM
+  UNCLAIM
+  APPROVE
+  REJECT
+  REQUEST_CHANGES
+  UNPUBLISH
+  RESTORE
+  ADMIN_OVERRIDE
+}
+
+model SuccessStory {
+  id                     String                  @id @default(cuid())
+  universityId           String
+  authorId               String
+  title                  String                  @db.VarChar(120)
+  slug                   String
+  summary                String                  @db.VarChar(300)
+  body                   String                  @db.Text
+  category               StoryCategory           @default(CAREER_MILESTONE)
+  tags                   String[]                @default([])
+  coverImageUrl          String?
+  coverImagePublicId     String?
+  embeddedMediaPublicIds String[]                @default([])
+  readingTimeMinutes     Int                     @default(3)
+  status                 StoryStatus             @default(DRAFT)
+  reviewerId             String?
+  claimedAt              DateTime?
+  ownerVisibleNote       String?
+  internalNote           String?
+  publishedAt            DateTime?
+  version                Int                     @default(1)
+  deletedAt              DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  university             University              @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  author                 User                    @relation("StoryAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reviewer               User?                   @relation("StoryReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  moderationHistory      StoryModerationRecord[]
+
+  @@unique([universityId, slug])
+  @@index([universityId, status, publishedAt(sort: Desc)])
+  @@index([authorId, status])
+  @@index([category])
+}
+
+model StoryModerationRecord {
+  id          String                @id @default(cuid())
+  storyId     String
+  moderatorId String
+  action      StoryModerationAction
+  reasonCode  String?
+  note        String?
+  createdAt   DateTime              @default(now())
+
+  story       SuccessStory          @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  moderator   User                  @relation("StoryModerator", fields: [moderatorId], references: [id], onDelete: Restrict)
+
+  @@index([storyId, createdAt])
+  @@index([moderatorId])
+}
+
 
 

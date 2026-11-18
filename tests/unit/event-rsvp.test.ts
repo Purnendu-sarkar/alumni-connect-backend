@@ -114,10 +114,10 @@ describe('Feature 8: Events & RSVP System Unit Tests', () => {
       } as any);
 
       // Current going count is 20
-      vi.spyOn(prisma.eventRsvp, 'count').mockImplementation(async (args: any) => {
-        if (args?.where?.status === 'GOING') return 20;
-        return 0;
-      });
+      vi.spyOn(prisma.eventRsvp, 'count').mockImplementation(((args: any) => {
+        if (args?.where?.status === 'GOING') return Promise.resolve(20);
+        return Promise.resolve(0);
+      }) as any);
 
       // Attempt to lower capacity to 15 (less than 20 going)
       await expect(
@@ -133,10 +133,10 @@ describe('Feature 8: Events & RSVP System Unit Tests', () => {
         status: 'PUBLISHED',
       } as any);
 
-      vi.spyOn(prisma.eventRsvp, 'count').mockImplementation(async (args: any) => {
-        if (args?.where?.status === 'GOING') return 12;
-        return 0;
-      });
+      vi.spyOn(prisma.eventRsvp, 'count').mockImplementation(((args: any) => {
+        if (args?.where?.status === 'GOING') return Promise.resolve(12);
+        return Promise.resolve(0);
+      }) as any);
 
       await expect(
         eventService.deleteEvent('admin-1', 'event-del-test')
