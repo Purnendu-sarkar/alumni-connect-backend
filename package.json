@@ -21,6 +21,11 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "npm run prisma:generate && tsx prisma/seed.ts",
+    "users:provision": "tsx prisma/provision-production-users.ts",
+    "jobs:provision": "tsx prisma/provision-production-jobs.ts",
+    "events:provision": "tsx prisma/provision-production-events.ts",
+    "announcements:provision": "tsx prisma/provision-production-announcements.ts",
+    "stories:provision": "tsx prisma/provision-production-stories.ts",
     "demo:clean": "tsx src/dev/clean.ts"
   },
   "prisma": {

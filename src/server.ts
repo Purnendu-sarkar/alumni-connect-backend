@@ -6,6 +6,11 @@ import { env } from './config/index.js';
 import { logger } from './config/logger.js';
 
 import { bootstrapService } from './services/bootstrap/bootstrap.service.js';
+import { startEventLifecycleCron, stopEventLifecycleCron } from './jobs/event-lifecycle.cron.js';
+import {
+  startAnnouncementLifecycleCron,
+  stopAnnouncementLifecycleCron,
+} from './jobs/announcement-lifecycle.cron.js';
 
 const server = createServer(app);
 
@@ -46,6 +51,11 @@ async function startServer() {
 
     // Step 4: Begin listening for incoming HTTP requests
     server.listen(env.PORT, () => {
+      // Step 5: Start background event lifecycle & reminder cron scheduler
+      startEventLifecycleCron();
+      // Step 6: Start background announcement lifecycle & scheduled publish cron scheduler
+      startAnnouncementLifecycleCron();
+
       if (env.NODE_ENV === 'development') {
         logger.info('[SERVER] API server started successfully.');
         logger.info(`[SERVER] Base URL: http://localhost:${env.PORT}`);
@@ -69,6 +79,8 @@ void startServer();
 
 async function shutdown(signal: string) {
   logger.info({ signal }, 'Gracefully shutting down');
+  stopEventLifecycleCron();
+  stopAnnouncementLifecycleCron();
   server.close(async (closeError) => {
     await prisma.$disconnect();
     if (closeError) {
