@@ -3,7 +3,10 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { sendSuccess } from '../utils/api-response.js';
 import type {
   adminUsersQuerySchema,
+  changeUserRoleSchema,
+  removeModeratorSchema,
   reviewVerificationSchema,
+  updateAdminUserSchema,
   verificationQuerySchema,
 } from '../validators/admin.schema.js';
 import type { z } from 'zod';
@@ -11,6 +14,9 @@ import type { z } from 'zod';
 type AdminUsersQuery = z.infer<typeof adminUsersQuerySchema>;
 type VerificationQuery = z.infer<typeof verificationQuerySchema>;
 type ReviewVerificationInput = z.infer<typeof reviewVerificationSchema>;
+type UpdateAdminUserPayload = z.infer<typeof updateAdminUserSchema>;
+type ChangeUserRolePayload = z.infer<typeof changeUserRoleSchema>;
+type RemoveModeratorPayload = z.infer<typeof removeModeratorSchema>;
 
 export const adminController = {
   listUsers: asyncHandler(async (request, response) => {
@@ -28,6 +34,49 @@ export const adminController = {
       request.auth!.universityId,
     );
     return sendSuccess(response, { data: user });
+  }),
+
+  updateUserByAdmin: asyncHandler(async (request, response) => {
+    const body = request.body as UpdateAdminUserPayload;
+    const updated = await adminService.updateUserByAdmin({
+      userId: request.params.userId as string,
+      universityId: request.auth!.universityId,
+      actorId: request.auth!.userId,
+      data: body,
+    });
+    return sendSuccess(response, {
+      message: 'User record updated successfully.',
+      data: updated,
+    });
+  }),
+
+  changeUserRole: asyncHandler(async (request, response) => {
+    const body = request.body as ChangeUserRolePayload;
+    const updated = await adminService.changeUserRole({
+      userId: request.params.userId as string,
+      universityId: request.auth!.universityId,
+      actorId: request.auth!.userId,
+      role: body.role,
+      graduationYear: body.graduationYear,
+      batch: body.batch,
+      reason: body.reason,
+    });
+    return sendSuccess(response, {
+      message: `User role updated to ${body.role}.`,
+      data: updated,
+    });
+  }),
+
+  sendPasswordResetByAdmin: asyncHandler(async (request, response) => {
+    const result = await adminService.sendPasswordResetByAdmin({
+      userId: request.params.userId as string,
+      universityId: request.auth!.universityId,
+      actorId: request.auth!.userId,
+    });
+    return sendSuccess(response, {
+      message: result.message,
+      data: result,
+    });
   }),
 
   terminateUserSessions: asyncHandler(async (request, response) => {
@@ -78,6 +127,35 @@ export const adminController = {
     return sendSuccess(response, { message: 'User verified.', data: user });
   }),
 
+  listModerators: asyncHandler(async (request, response) => {
+    const result = await adminService.listModerators(request.auth!.universityId);
+    return sendSuccess(response, { data: result });
+  }),
+
+  removeModerator: asyncHandler(async (request, response) => {
+    const body = request.body as RemoveModeratorPayload;
+    const result = await adminService.removeModerator({
+      userId: request.params.userId as string,
+      universityId: request.auth!.universityId,
+      actorId: request.auth!.userId,
+      reason: body.reason,
+    });
+    return sendSuccess(response, {
+      message: 'Moderator deactivated and claimed queue items released.',
+      data: result,
+    });
+  }),
+
+  getRolesOverview: asyncHandler(async (request, response) => {
+    const data = await adminService.getRolesOverview(request.auth!.universityId);
+    return sendSuccess(response, { data });
+  }),
+
+  listAdmins: asyncHandler(async (request, response) => {
+    const admins = await adminService.listAdmins(request.auth!.universityId);
+    return sendSuccess(response, { data: admins });
+  }),
+
   listUniversities: asyncHandler(async (_request, response) => {
     const universities = await adminService.listUniversities();
     return sendSuccess(response, { data: universities });
@@ -111,8 +189,8 @@ export const adminController = {
     });
   }),
 
-  getStats: asyncHandler(async (_request, response) => {
-    const stats = await adminService.getStats();
+  getStats: asyncHandler(async (request, response) => {
+    const stats = await adminService.getStats(request.auth!.universityId);
     return sendSuccess(response, { data: stats });
   }),
 
@@ -143,6 +221,7 @@ export const adminController = {
     const result = await adminService.inviteModerator({
       email,
       actorId: request.auth!.userId,
+      universityId: request.auth!.universityId,
     });
     return sendSuccess(response, {
       statusCode: 201,
@@ -160,6 +239,7 @@ export const adminController = {
     const result = await adminService.resendModeratorInvitation(
       request.params.id as string,
       request.auth!.userId,
+      request.auth!.universityId,
     );
     return sendSuccess(response, {
       message: 'Invitation resent successfully.',
@@ -171,6 +251,7 @@ export const adminController = {
     const result = await adminService.revokeModeratorInvitation(
       request.params.id as string,
       request.auth!.userId,
+      request.auth!.universityId,
     );
     return sendSuccess(response, {
       message: result.message,
@@ -181,6 +262,7 @@ export const adminController = {
     const { isActive, reason } = request.body as { isActive: boolean; reason?: string };
     const user = await adminService.toggleUserSuspension({
       userId: request.params.userId as string,
+      universityId: request.auth!.universityId,
       isActive: Boolean(isActive),
       reason,
       actorId: request.auth!.userId,

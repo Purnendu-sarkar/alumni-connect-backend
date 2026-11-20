@@ -8,6 +8,8 @@ import { cacheService } from '../../src/services/cache/cache.service.js';
 describe('Feature 3: Alumni & Community Directory Unit Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(cacheService, 'get').mockResolvedValue(null);
+    vi.spyOn(cacheService, 'set').mockResolvedValue(undefined);
   });
 
   describe('Privacy Field Masking & Presenter', () => {

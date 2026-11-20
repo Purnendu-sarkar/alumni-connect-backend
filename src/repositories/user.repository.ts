@@ -21,6 +21,7 @@ export interface AlumniFilters extends PaginationInput {
 export interface VerificationFilters extends PaginationInput {
   role?: RoleName;
   status?: VerificationStatus;
+  emailVerified?: 'ALL' | 'VERIFIED' | 'UNVERIFIED';
   search?: string;
 }
 
@@ -302,10 +303,16 @@ export const userRepository = {
   },
 
   listVerifications(universityId: string, filters: VerificationFilters) {
+    const emailVerifiedWhere =
+      filters.emailVerified === 'VERIFIED'
+        ? { verified: true }
+        : filters.emailVerified === 'UNVERIFIED'
+          ? { verified: false }
+          : {};
+
     const where: Prisma.UserWhereInput = {
       universityId,
-      // Only email-verified users can be processed for administrative accreditation
-      verified: true,
+      ...emailVerifiedWhere,
       role: { name: filters.role ?? 'ALUMNI' },
       ...(filters.status ? { verificationStatus: filters.status } : {}),
       ...(filters.search
@@ -315,6 +322,7 @@ export const userRepository = {
               { email: { contains: filters.search, mode: 'insensitive' } },
               { department: { contains: filters.search, mode: 'insensitive' } },
               { batch: { contains: filters.search, mode: 'insensitive' } },
+              { studentId: { contains: filters.search, mode: 'insensitive' } },
               { academicId: { contains: filters.search, mode: 'insensitive' } },
               { currentCompany: { contains: filters.search, mode: 'insensitive' } },
             ],
@@ -331,15 +339,15 @@ export const userRepository = {
           email: true,
           batch: true,
           department: true,
-        departmentId: true,
-        departmentRef: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-            faculty: true,
+          departmentId: true,
+          departmentRef: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              faculty: true,
+            },
           },
-        },
           studentId: true,
           academicId: true,
           currentSemester: true,
@@ -354,8 +362,9 @@ export const userRepository = {
           verifiedAt: true,
           createdAt: true,
           role: { select: { id: true, name: true } },
+          university: { select: { domain: true } },
         },
-        orderBy: [{ createdAt: 'desc' }],
+        orderBy: [{ verified: 'desc' }, { createdAt: 'desc' }],
         skip: (filters.page - 1) * filters.limit,
         take: filters.limit,
       }),
@@ -444,6 +453,19 @@ export const userRepository = {
       include: {
         role: { select: { id: true, name: true, description: true } },
         university: { select: { id: true, name: true, slug: true, domain: true } },
+        departmentRef: { select: { id: true, name: true, code: true, faculty: true } },
+        _count: {
+          select: {
+            sentConnections: true,
+            receivedConnections: true,
+            mentoringRequests: true,
+            menteeRequests: true,
+            jobsPosted: true,
+            jobApplications: true,
+            eventRsvps: true,
+            authoredStories: true,
+          },
+        },
         refreshTokens: {
           select: {
             id: true,
@@ -590,6 +612,99 @@ export const userRepository = {
       where: { id: userId, universityId },
       data: { avatarUrl, avatarPublicId },
       select: { id: true, avatarUrl: true, avatarPublicId: true },
+    });
+  },
+
+  updateUserByAdmin(userId: string, universityId: string, data: Prisma.UserUpdateInput) {
+    return prisma.user.update({
+      where: { id: userId, universityId },
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        department: true,
+        departmentId: true,
+        departmentRef: { select: { id: true, name: true, code: true, faculty: true } },
+        batch: true,
+        graduationYear: true,
+        studentId: true,
+        academicId: true,
+        currentSemester: true,
+        expectedGraduationYear: true,
+        position: true,
+        currentCompany: true,
+        employmentStatus: true,
+        verified: true,
+        verificationStatus: true,
+        isActive: true,
+        role: { select: { id: true, name: true } },
+        updatedAt: true,
+      },
+    });
+  },
+
+  updateUserActiveStatus(userId: string, universityId: string, isActive: boolean) {
+    return prisma.user.update({
+      where: { id: userId, universityId },
+      data: { isActive },
+      select: { id: true, name: true, email: true, isActive: true },
+    });
+  },
+
+  async updateUserRoleTransaction(
+    userId: string,
+    universityId: string,
+    data: {
+      roleId: string;
+      targetRoleName: 'STUDENT' | 'ALUMNI';
+      graduationYear?: string | null;
+      batch?: string | null;
+    },
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId, universityId },
+        data: {
+          role: { connect: { id: data.roleId } },
+          ...(data.graduationYear !== undefined ? { graduationYear: data.graduationYear } : {}),
+          ...(data.batch !== undefined ? { batch: data.batch } : {}),
+          ...(data.targetRoleName === 'ALUMNI'
+            ? { verificationStatus: 'APPROVED', verifiedAt: new Date() }
+            : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          graduationYear: true,
+          batch: true,
+          verified: true,
+          verificationStatus: true,
+          isActive: true,
+          role: { select: { id: true, name: true } },
+        },
+      });
+
+      // If transitioning ALUMNI -> STUDENT, close open published jobs posted by this user
+      if (data.targetRoleName === 'STUDENT') {
+        await tx.job.updateMany({
+          where: {
+            universityId,
+            postedById: userId,
+            status: 'PUBLISHED',
+            deletedAt: null,
+          },
+          data: {
+            status: 'CLOSED',
+            closedAt: new Date(),
+            closedReason: 'Account transitioned from Alumni to Student role by administrator.',
+            version: { increment: 1 },
+          },
+        });
+      }
+
+      return updatedUser;
     });
   },
 };

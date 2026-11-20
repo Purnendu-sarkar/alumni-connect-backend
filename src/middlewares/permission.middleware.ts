@@ -66,7 +66,7 @@ export function requireRole(...allowedRoles: string[]): RequestHandler {
           })
           .catch(() => {});
       }
-      return next(ApiError.forbidden('You do not have access to this institutional resource.'));
+      return next(ApiError.forbidden('Forbidden: You do not have permission to access this institutional resource.'));
     }
 
     return next();
