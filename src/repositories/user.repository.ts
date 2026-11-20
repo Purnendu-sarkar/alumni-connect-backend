@@ -364,7 +364,7 @@ export const userRepository = {
           role: { select: { id: true, name: true } },
           university: { select: { domain: true } },
         },
-        orderBy: [{ verified: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ createdAt: 'desc' }],
         skip: (filters.page - 1) * filters.limit,
         take: filters.limit,
       }),

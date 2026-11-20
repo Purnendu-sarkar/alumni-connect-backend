@@ -60,10 +60,28 @@ async function main() {
     }),
   );
 
+  const canonicalSlug =
+    process.env.BOOTSTRAP_UNIVERSITY_SLUG || 'north-western-university';
+  const canonicalName =
+    process.env.BOOTSTRAP_UNIVERSITY_NAME || 'North Western University';
+  const canonicalDomain =
+    process.env.BOOTSTRAP_UNIVERSITY_DOMAIN || 'nwu.ac.bd';
+
   const university = await prisma.university.upsert({
-    where: { slug: 'demo-university' },
-    update: { name: 'Demo University', isActive: true },
-    create: { name: 'Demo University', slug: 'demo-university', domain: 'demo.edu', isActive: true },
+    where: { slug: canonicalSlug },
+    update: {
+      name: canonicalName,
+      domain: canonicalDomain,
+      isActive: true,
+      isDemo: false,
+    },
+    create: {
+      name: canonicalName,
+      slug: canonicalSlug,
+      domain: canonicalDomain,
+      isActive: true,
+      isDemo: false,
+    },
   });
 
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: RoleName.SUPER_ADMIN } });
@@ -72,22 +90,25 @@ async function main() {
   await prisma.user.upsert({
     where: { email: seedAdminEmail! },
     update: {
-      name: 'Platform Super Admin',
+      name: process.env.BOOTSTRAP_SUPER_ADMIN_NAME || 'Platform Super Admin',
       universityId: university.id,
       roleId: adminRole.id,
       passwordHash,
       verified: true,
       verificationStatus: 'APPROVED',
       isActive: true,
+      isDemo: false,
     },
     create: {
-      name: 'Platform Super Admin',
+      name: process.env.BOOTSTRAP_SUPER_ADMIN_NAME || 'Platform Super Admin',
       email: seedAdminEmail!,
       passwordHash,
       universityId: university.id,
       roleId: adminRole.id,
       verified: true,
       verificationStatus: 'APPROVED',
+      isActive: true,
+      isDemo: false,
     },
   });
 

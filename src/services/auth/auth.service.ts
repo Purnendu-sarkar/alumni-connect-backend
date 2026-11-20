@@ -86,12 +86,18 @@ export async function issueSession(user: AuthenticatedUserRecord, existingFamily
 
 export const authService = {
   async register(input: RegisterInput) {
-    let university = input.universitySlug
-      ? await universityRepository.findBySlug(input.universitySlug)
-      : null;
+    const targetSlug =
+      input.universitySlug ||
+      env.BOOTSTRAP_UNIVERSITY_SLUG ||
+      'north-western-university';
+
+    let university = await universityRepository.findBySlug(targetSlug);
 
     if (!university) {
-      university = await prisma.university.findFirst({ where: { isActive: true } });
+      university = await prisma.university.findFirst({
+        where: { isActive: true, isDemo: false },
+        orderBy: { createdAt: 'asc' },
+      });
     }
 
     if (!university || !university.isActive) {

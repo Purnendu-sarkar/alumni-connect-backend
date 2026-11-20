@@ -24,7 +24,7 @@ export class BootstrapService {
       // Acquire PostgreSQL session/transaction advisory lock to prevent race conditions across multi-instance boots
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BOOTSTRAP_ADVISORY_LOCK_ID})`;
 
-      // Find any existing non-demo Super Admin
+      // Step 2.1: Find any existing non-demo Super Admin
       const existingSuperAdmin = await tx.user.findFirst({
         where: {
           role: { name: RoleName.SUPER_ADMIN },
@@ -35,10 +35,57 @@ export class BootstrapService {
           email: true,
           name: true,
           isActive: true,
+          universityId: true,
         },
       });
 
+      // Step 2.2: Resolve canonical institutional university
+      const university = tx.university
+        ? await tx.university.upsert({
+            where: { slug: env.BOOTSTRAP_UNIVERSITY_SLUG },
+            update: {
+              isActive: true,
+              name: env.BOOTSTRAP_UNIVERSITY_NAME,
+              domain: env.BOOTSTRAP_UNIVERSITY_DOMAIN,
+              isDemo: false,
+            },
+            create: {
+              name: env.BOOTSTRAP_UNIVERSITY_NAME,
+              slug: env.BOOTSTRAP_UNIVERSITY_SLUG,
+              domain: env.BOOTSTRAP_UNIVERSITY_DOMAIN,
+              isActive: true,
+              isDemo: false,
+            },
+          })
+        : null;
+
       if (existingSuperAdmin) {
+        // Automatically sync Super Admin university if mismatched with canonical institution
+        if (university && existingSuperAdmin.universityId !== university.id) {
+          if (tx.user?.update) {
+            await tx.user.update({
+              where: { id: existingSuperAdmin.id },
+              data: {
+                universityId: university.id,
+                isActive: true,
+                isDemo: false,
+              },
+            });
+          }
+
+          // Revoke any legacy tokens bound to previous university
+          if (tx.refreshToken?.deleteMany) {
+            await tx.refreshToken.deleteMany({
+              where: { userId: existingSuperAdmin.id },
+            });
+          }
+
+          logger.info(
+            { superAdminId: existingSuperAdmin.id, universityId: university.id },
+            '[AUTH] Synced Super Admin university binding to canonical institution.',
+          );
+        }
+
         logger.info(
           env.NODE_ENV === 'development'
             ? '[SUCCESS] Platform Super Admin verified.'
@@ -48,7 +95,7 @@ export class BootstrapService {
         return { status: 'existing', superAdminId: existingSuperAdmin.id };
       }
 
-      // If no Super Admin exists, bootstrap credentials are required
+      // Step 2.3: If no Super Admin exists, bootstrap credentials are required
       const bootstrapEmail = env.BOOTSTRAP_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
       const bootstrapPassword = env.BOOTSTRAP_SUPER_ADMIN_PASSWORD;
 
@@ -75,21 +122,24 @@ export class BootstrapService {
         );
       }
 
-      // Ensure primary institutional/system tenant exists
-      const university = await tx.university.upsert({
-        where: { slug: env.BOOTSTRAP_UNIVERSITY_SLUG },
-        update: {
-          isActive: true,
-          name: env.BOOTSTRAP_UNIVERSITY_NAME,
-        },
-        create: {
-          name: env.BOOTSTRAP_UNIVERSITY_NAME,
-          slug: env.BOOTSTRAP_UNIVERSITY_SLUG,
-          domain: env.BOOTSTRAP_UNIVERSITY_DOMAIN,
-          isActive: true,
-          isDemo: false,
-        },
-      });
+      const resolvedUniversity =
+        university ??
+        (await tx.university.upsert({
+          where: { slug: env.BOOTSTRAP_UNIVERSITY_SLUG },
+          update: {
+            isActive: true,
+            name: env.BOOTSTRAP_UNIVERSITY_NAME,
+            domain: env.BOOTSTRAP_UNIVERSITY_DOMAIN,
+            isDemo: false,
+          },
+          create: {
+            name: env.BOOTSTRAP_UNIVERSITY_NAME,
+            slug: env.BOOTSTRAP_UNIVERSITY_SLUG,
+            domain: env.BOOTSTRAP_UNIVERSITY_DOMAIN,
+            isActive: true,
+            isDemo: false,
+          },
+        }));
 
       const superAdminRole = await tx.role.findUniqueOrThrow({
         where: { name: RoleName.SUPER_ADMIN },
@@ -102,7 +152,7 @@ export class BootstrapService {
           email: bootstrapEmail,
           passwordHash,
           name: env.BOOTSTRAP_SUPER_ADMIN_NAME,
-          universityId: university.id,
+          universityId: resolvedUniversity.id,
           roleId: superAdminRole.id,
           verified: true,
           verificationStatus: 'APPROVED',

@@ -301,6 +301,44 @@ describe('Super Admin User Governance Service Unit Tests', () => {
     });
   });
 
+  describe('listModerators', () => {
+    it('returns active moderators with both stats and activityStats objects', async () => {
+      vi.spyOn(adminRepository, 'listModeratorsWithStats').mockResolvedValue([
+        {
+          id: 'mod-1',
+          name: 'Faculty Mod',
+          email: 'mod@nwu.edu.bd',
+          avatarUrl: null,
+          department: 'CSE',
+          isActive: true,
+          verified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          role: { id: 'role-mod', name: 'MODERATOR' },
+          stats: {
+            jobsReviewed30d: 4,
+            storiesReviewed30d: 2,
+            activeClaimedJobs: 1,
+            activeClaimedStories: 0,
+          },
+          activityStats: {
+            jobsReviewed30d: 4,
+            storiesReviewed30d: 2,
+            activeClaimedJobs: 1,
+            activeClaimedStories: 0,
+          },
+        } as never,
+      ]);
+      vi.spyOn(adminRepository, 'listModeratorInvitations').mockResolvedValue([]);
+
+      const result = await adminService.listModerators('uni-1');
+
+      expect(result.moderators).toHaveLength(1);
+      expect((result.moderators[0] as any).stats.activeClaimedJobs).toBe(1);
+      expect((result.moderators[0] as any).activityStats.activeClaimedJobs).toBe(1);
+    });
+  });
+
   describe('removeModerator', () => {
     it('deactivates moderator, releases claimed UNDER_REVIEW jobs & stories, revokes sessions, and bumps caches', async () => {
       vi.spyOn(userRepository, 'findAuthenticatedById').mockResolvedValue({

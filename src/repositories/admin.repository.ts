@@ -205,15 +205,19 @@ export const adminRepository = {
       claimedStoriesRows.filter((r) => r.reviewerId).map((r) => [r.reviewerId!, r._count.id]),
     );
 
-    return moderators.map((mod) => ({
-      ...mod,
-      activityStats: {
+    return moderators.map((mod) => {
+      const stats = {
         jobsReviewed30d: jobsReviewedMap.get(mod.id) ?? 0,
         storiesReviewed30d: storiesReviewedMap.get(mod.id) ?? 0,
         activeClaimedJobs: claimedJobsMap.get(mod.id) ?? 0,
         activeClaimedStories: claimedStoriesMap.get(mod.id) ?? 0,
-      },
-    }));
+      };
+      return {
+        ...mod,
+        stats,
+        activityStats: stats,
+      };
+    });
   },
 
   async removeModeratorTransaction(userId: string, universityId: string) {
