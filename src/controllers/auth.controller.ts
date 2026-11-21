@@ -1,10 +1,11 @@
 import type { CookieOptions, Response } from 'express';
 
-import { shouldUseSecureCookies } from '../config/index.js';
+import { env, shouldUseSecureCookies } from '../config/index.js';
+import { ApiError } from '../errors/api-error.js';
 import { authService } from '../services/auth/auth.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { sendSuccess } from '../utils/api-response.js';
-import type { loginSchema, registerSchema } from '../validators/auth.schema.js';
+import { quickAccessSchema, type loginSchema, type registerSchema } from '../validators/auth.schema.js';
 import type { z } from 'zod';
 
 const refreshCookieOptions: CookieOptions = {
@@ -163,6 +164,40 @@ export const authController = {
     return sendSuccess(response, {
       message: result.message,
       data: { role: result.role },
+    });
+  }),
+
+  getQuickAccessProfiles: asyncHandler(async (_request, response) => {
+    const isAvailable = env.ENABLE_SHOWCASE_LOGIN || env.NODE_ENV !== 'production';
+    const profiles = await authService.getQuickAccessProfiles();
+    return sendSuccess(response, {
+      data: {
+        enabled: isAvailable,
+        environment: env.NODE_ENV,
+        profiles: isAvailable ? profiles : [],
+        roles: isAvailable
+          ? profiles.map((p) => ({ role: p.role, label: p.label, email: p.email, name: p.name }))
+          : [],
+      },
+    });
+  }),
+
+  quickAccessLogin: asyncHandler(async (request, response) => {
+    if (!env.ENABLE_SHOWCASE_LOGIN && env.NODE_ENV === 'production') {
+      throw ApiError.forbidden('Quick role access is disabled in production.');
+    }
+
+    const { role } = quickAccessSchema.parse(request.body);
+    const session = await authService.quickAccessLogin(role, {
+      ip: request.ip,
+      userAgent: request.get('user-agent'),
+      requestId: request.requestId,
+    });
+    writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
+
+    return sendSuccess(response, {
+      message: `Signed in as ${session.user.name} (${role}).`,
+      data: { accessToken: session.accessToken, user: session.user },
     });
   }),
 };

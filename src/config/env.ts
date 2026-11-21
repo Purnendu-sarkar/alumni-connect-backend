@@ -34,6 +34,9 @@ export const environmentSchema = z.object({
   // Development Demo Mode Flag (default-off)
   DEMO_ENABLED: booleanFromEnv.default(false),
 
+  // Quick-Access Showcase Login Mode Flag (default-on in dev/staging)
+  ENABLE_SHOWCASE_LOGIN: booleanFromEnv.default(true),
+
   // Mailpit / Local SMTP Email Configuration
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().default(1025),

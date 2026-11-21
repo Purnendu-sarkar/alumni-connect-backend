@@ -64,6 +64,22 @@ export interface ViewerContext {
   applicationStatus?: string | null;
 }
 
+function stripHtml(html?: string | null): string {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export const jobPresenter = {
   formatSalary(min?: number | null, max?: number | null, currency?: string | null): string {
     const cur = currency || 'BDT';
@@ -139,6 +155,7 @@ export const jobPresenter = {
       applicationUrl: job.applicationUrl || null,
       applicationEmail: job.applicationEmail || null,
       applicantCount: job._count?.applications ?? 0,
+      descriptionSnippet: stripHtml(job.description).slice(0, 200),
       hasApplied: viewer?.hasApplied ?? false,
       myApplicationStatus: viewer?.applicationStatus ?? null,
       isOwner: viewer?.userId ? viewer.userId === job.postedById : false,
@@ -181,6 +198,7 @@ export const jobPresenter = {
       company: job.company,
       category: job.category,
       description: job.description,
+      descriptionSnippet: stripHtml(job.description).slice(0, 200),
       requirements: job.requirements,
       employmentType: job.employmentType,
       workMode: job.workMode,
@@ -224,6 +242,7 @@ export const jobPresenter = {
       company: job.company,
       category: job.category,
       description: job.description,
+      descriptionSnippet: stripHtml(job.description).slice(0, 200),
       requirements: job.requirements,
       employmentType: job.employmentType,
       workMode: job.workMode,

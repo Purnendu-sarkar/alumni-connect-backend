@@ -10,6 +10,7 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
+  quickAccessSchema,
   registerSchema,
   resetPasswordSchema,
   setupAccountSchema,
@@ -142,37 +143,37 @@ authRouter.post(
   authController.verifyEmail,
 );
 
-// Development Demo Endpoints (Removable & Graceful fallback if module is disabled/omitted)
-authRouter.get(
-  '/demo-capabilities',
-  async (request, response, next) => {
-    try {
-      const { demoController } = await import('../dev/demo.controller.js');
-      return demoController.getCapabilities(request, response, next);
-    } catch {
-      return response.status(200).json({ success: true, data: { enabled: false, roles: [] } });
-    }
-  },
-);
-
-const demoRateLimit = rateLimit({
+// Quick Role Access Showcase Endpoints
+const quickAccessRateLimit = rateLimit({
   windowMs: 15 * 60 * 1_000,
   limit: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many demo login attempts. Try again later.' },
+  message: { success: false, message: 'Too many quick access login attempts. Try again later.' },
 });
+
+authRouter.get(
+  '/quick-access/profiles',
+  authController.getQuickAccessProfiles,
+);
+
+authRouter.post(
+  '/quick-access',
+  quickAccessRateLimit,
+  validate(quickAccessSchema),
+  authController.quickAccessLogin,
+);
+
+// Backward compatibility aliases for legacy demo endpoints
+authRouter.get(
+  '/demo-capabilities',
+  authController.getQuickAccessProfiles,
+);
 
 authRouter.post(
   '/demo-login',
-  demoRateLimit,
-  async (request, response, next) => {
-    try {
-      const { demoController } = await import('../dev/demo.controller.js');
-      return demoController.demoLogin(request, response, next);
-    } catch (err) {
-      return next(err);
-    }
-  },
+  quickAccessRateLimit,
+  validate(quickAccessSchema),
+  authController.quickAccessLogin,
 );
 

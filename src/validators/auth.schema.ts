@@ -89,3 +89,7 @@ export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required.'),
   newPassword: passwordSchema,
 });
+
+export const quickAccessSchema = z.object({
+  role: z.enum(['SUPER_ADMIN', 'MODERATOR', 'ALUMNI', 'STUDENT']),
+});

@@ -26,6 +26,7 @@
     "events:provision": "tsx prisma/provision-production-events.ts",
     "announcements:provision": "tsx prisma/provision-production-announcements.ts",
     "stories:provision": "tsx prisma/provision-production-stories.ts",
+    "showcase:provision": "tsx prisma/provision-quick-login-showcase.ts",
     "demo:clean": "tsx src/dev/clean.ts"
   },
   "prisma": {

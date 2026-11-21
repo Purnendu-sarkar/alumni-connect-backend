@@ -53,6 +53,22 @@ export interface EventWithCreator extends Partial<Event> {
   rsvps?: Partial<EventRsvp>[];
 }
 
+function stripHtml(html?: string | null): string {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export const eventPresenter = {
   shouldExposeOnlineUrl(
     viewer?: EventViewerContext,
@@ -99,6 +115,7 @@ export const eventPresenter = {
       title: event.title,
       slug: event.slug,
       description: event.description,
+      descriptionSnippet: stripHtml(event.description).slice(0, 200),
       category: event.category,
       organizer: event.organizer || null,
       mode: event.mode,
@@ -142,6 +159,7 @@ export const eventPresenter = {
       title: event.title,
       slug: event.slug,
       description: event.description,
+      descriptionSnippet: stripHtml(event.description).slice(0, 200),
       category: event.category,
       organizer: event.organizer || null,
       mode: event.mode,
@@ -186,6 +204,7 @@ export const eventPresenter = {
       title: event.title,
       slug: event.slug,
       description: event.description,
+      descriptionSnippet: stripHtml(event.description).slice(0, 200),
       category: event.category,
       organizer: event.organizer || null,
       mode: event.mode,

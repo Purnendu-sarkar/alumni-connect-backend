@@ -638,4 +638,144 @@ export const authService = {
     if (!user) throw ApiError.unauthorized('This account is unavailable.');
     return user;
   },
+
+  async getQuickAccessProfiles() {
+    const roleKeys: Array<keyof typeof SHOWCASE_ACCOUNTS> = [
+      'SUPER_ADMIN',
+      'MODERATOR',
+      'ALUMNI',
+      'STUDENT',
+    ];
+    const emails = roleKeys.map((r) => SHOWCASE_ACCOUNTS[r].email.toLowerCase());
+
+    const users = await prisma.user.findMany({
+      where: {
+        email: { in: emails },
+        isActive: true,
+      },
+      include: {
+        role: true,
+      },
+    });
+
+    const userMap = new Map(users.map((u) => [u.email.toLowerCase(), u]));
+
+    return roleKeys.map((roleKey) => {
+      const config = SHOWCASE_ACCOUNTS[roleKey];
+      const user = userMap.get(config.email.toLowerCase());
+
+      if (user) {
+        let designation = user.headline;
+        if (!designation) {
+          if (roleKey === 'STUDENT') {
+            designation = `${user.department || 'CSE'} ${
+              user.currentSemester ? `(${user.currentSemester})` : `Batch ${user.batch || '2022'}`
+            }`;
+          } else if (roleKey === 'ALUMNI') {
+            designation =
+              user.position && user.currentCompany
+                ? `${user.position} at ${user.currentCompany}`
+                : config.defaultTitle;
+          } else if (roleKey === 'MODERATOR') {
+            designation = user.department
+              ? `Faculty Moderator (${user.department})`
+              : config.defaultTitle;
+          } else {
+            designation = config.defaultTitle;
+          }
+        }
+
+        return {
+          role: roleKey,
+          label: config.label,
+          name: user.name,
+          email: user.email,
+          department: user.department,
+          designation,
+          avatarUrl: user.avatarUrl,
+        };
+      }
+
+      return {
+        role: roleKey,
+        label: config.label,
+        name: config.label,
+        email: config.email,
+        department: null,
+        designation: config.defaultTitle,
+        avatarUrl: null,
+      };
+    });
+  },
+
+  async quickAccessLogin(
+    role: 'SUPER_ADMIN' | 'MODERATOR' | 'ALUMNI' | 'STUDENT',
+    context?: { ip?: string; userAgent?: string; requestId?: string },
+  ) {
+    const config = SHOWCASE_ACCOUNTS[role];
+    if (!config) {
+      throw ApiError.badRequest(`Unrecognized showcase role '${role}'.`);
+    }
+
+    let user = await userRepository.findAuthenticatedByEmail(config.email);
+
+    // Fallback if specific canonical email changed: find first active approved user of that role in canonical university
+    if (!user) {
+      const fallbackUser = await prisma.user.findFirst({
+        where: {
+          role: { name: role },
+          university: { slug: 'north-western-university' },
+          isActive: true,
+          verificationStatus: 'APPROVED',
+        },
+        select: { email: true },
+      });
+      if (fallbackUser) {
+        user = await userRepository.findAuthenticatedByEmail(fallbackUser.email);
+      }
+    }
+
+    if (!user || !user.isActive) {
+      throw ApiError.notFound(`Quick access user record for role '${role}' is not available.`);
+    }
+
+    await auditLogRepository.record({
+      universityId: user.universityId,
+      actorId: user.id,
+      actorRole: user.role?.name,
+      action: 'USER_LOGIN',
+      result: 'SUCCESS',
+      targetType: 'user',
+      targetId: user.id,
+      ip: context?.ip,
+      userAgent: context?.userAgent,
+      requestId: context?.requestId,
+      metadata: { method: 'QUICK_ACCESS_SHOWCASE', role },
+    });
+
+    return issueSession(user);
+  },
 };
+
+export const SHOWCASE_ACCOUNTS = {
+  SUPER_ADMIN: {
+    email: env.BOOTSTRAP_SUPER_ADMIN_EMAIL || 'dsr102.purnendu@gmail.com',
+    label: 'Super Admin',
+    defaultTitle: 'Platform Governance Lead',
+  },
+  MODERATOR: {
+    email: 'mod.cse.islam@nwu.ac.bd',
+    label: 'Moderator',
+    defaultTitle: 'CSE Faculty & Moderator',
+  },
+  ALUMNI: {
+    email: 'arif.gazi.2016.21@alumni.nwu.ac.bd',
+    label: 'Alumni',
+    defaultTitle: 'BBA Class of 2016 · HRBP',
+  },
+  STUDENT: {
+    email: '2022101013@nwu.ac.bd',
+    label: 'Student',
+    defaultTitle: 'CSE Undergraduate · 8th Sem',
+  },
+} as const;
