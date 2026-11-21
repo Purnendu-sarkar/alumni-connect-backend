@@ -18,6 +18,8 @@ export function getCloudinaryFolder(purpose: UploadPurpose, role: string, userId
       return `alumni-connect/events/banners/${userId}`;
     case 'ANNOUNCEMENT_ATTACHMENT':
       return `alumni-connect/announcements/attachments/${userId}`;
+    case 'MESSAGE_ATTACHMENT':
+      return `alumni-connect/messages/${userId}`;
     case 'RESUME':
       return `alumni-connect/documents/resumes/${userId}`;
     default:
@@ -222,5 +224,13 @@ export const mediaService = {
 
     await userRepository.updateAvatar(userId, universityId, null, null);
     return { avatarUrl: null, avatarPublicId: null };
+  },
+
+  async deleteCloudinaryAsset(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image') {
+    try {
+      await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    } catch {
+      // Continue even if Cloudinary fails
+    }
   },
 };

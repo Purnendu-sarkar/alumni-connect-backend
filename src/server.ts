@@ -11,6 +11,7 @@ import {
   startAnnouncementLifecycleCron,
   stopAnnouncementLifecycleCron,
 } from './jobs/announcement-lifecycle.cron.js';
+import { initSocketServer, stopSocketServer } from './realtime/socket.server.js';
 
 const server = createServer(app);
 
@@ -49,11 +50,14 @@ async function startServer() {
       logger.info('[DEMO] Development demo module is disabled (DEMO_ENABLED=false or production mode).');
     }
 
-    // Step 4: Begin listening for incoming HTTP requests
+    // Step 4: Initialize Socket.io real-time engine
+    initSocketServer(server);
+
+    // Step 5: Begin listening for incoming HTTP requests
     server.listen(env.PORT, () => {
-      // Step 5: Start background event lifecycle & reminder cron scheduler
+      // Step 6: Start background event lifecycle & reminder cron scheduler
       startEventLifecycleCron();
-      // Step 6: Start background announcement lifecycle & scheduled publish cron scheduler
+      // Step 7: Start background announcement lifecycle & scheduled publish cron scheduler
       startAnnouncementLifecycleCron();
 
       if (env.NODE_ENV === 'development') {
@@ -79,6 +83,7 @@ void startServer();
 
 async function shutdown(signal: string) {
   logger.info({ signal }, 'Gracefully shutting down');
+  stopSocketServer();
   stopEventLifecycleCron();
   stopAnnouncementLifecycleCron();
   server.close(async (closeError) => {

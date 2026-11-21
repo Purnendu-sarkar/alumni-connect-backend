@@ -26,6 +26,7 @@ import { announcementRouter } from './announcement.routes.js';
 import { adminAnnouncementRouter } from './admin-announcement.routes.js';
 import { storyRouter } from './story.routes.js';
 import { adminStoryRouter } from './admin-story.routes.js';
+import { messageRouter } from './message.routes.js';
 
 export const apiRouter = Router();
 
@@ -66,6 +67,7 @@ apiRouter.use('/admin/announcements', adminAnnouncementRouter);
 apiRouter.use('/stories', storyRouter);
 apiRouter.use('/moderator/stories', adminStoryRouter);
 apiRouter.use('/admin/stories', adminStoryRouter);
+apiRouter.use('/messages', messageRouter);
 
 // Removable Development Demo Module: gracefully mounts when present and enabled
 try {

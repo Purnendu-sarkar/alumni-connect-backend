@@ -127,6 +127,7 @@ enum UploadPurpose {
   STORY_MEDIA
   EVENT_BANNER
   ANNOUNCEMENT_ATTACHMENT
+  MESSAGE_ATTACHMENT
 }
 
 enum AuditResult {
@@ -154,6 +155,7 @@ enum NotificationType {
   EVENT_REMINDER
   ANNOUNCEMENT
   STORY_REVIEW
+  NEW_MESSAGE
 }
 
 enum EventStatus {
@@ -221,6 +223,7 @@ model University {
   analyticsEvents  AnalyticsEvent[]
   auditLogs        AuditLog[]
   departments      Department[]
+  conversations    Conversation[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
@@ -303,6 +306,9 @@ model User {
   auditLogs           AuditLog[]          @relation("AuditActor")
   notifications       Notification[]
   notificationPreferences NotificationPreference[]
+  conversationsCreated Conversation[]      @relation("ConversationCreator")
+  conversationParticipations ConversationParticipant[] @relation("ParticipantUser")
+  messagesSent        Message[]           @relation("MessageSender")
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
@@ -943,6 +949,103 @@ model StoryModerationRecord {
   @@index([storyId, createdAt])
   @@index([moderatorId])
 }
+
+enum ConversationContext {
+  DIRECT
+  MENTORSHIP
+  JOB_APPLICATION
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  AUDIO
+  SYSTEM
+}
+
+enum MessageDeliveryStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+model Conversation {
+  id                 String                   @id @default(cuid())
+  universityId       String
+  userLowId          String                   @db.VarChar(64)
+  userHighId         String                   @db.VarChar(64)
+  contextType        ConversationContext      @default(DIRECT)
+  contextId          String?                  @db.VarChar(64)
+  createdById        String
+  lastMessageId      String?                  @unique
+  lastMessageAt      DateTime?
+  lastMessageSnippet String?                  @db.VarChar(255)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  university         University               @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  createdBy          User                     @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lastMessage        Message?                 @relation("LastMessageRelation", fields: [lastMessageId], references: [id], onDelete: SetNull)
+  participants       ConversationParticipant[]
+  messages           Message[]                @relation("ConversationMessages")
+
+  @@unique([universityId, userLowId, userHighId])
+  @@index([universityId, lastMessageAt(sort: Desc)])
+  @@index([userLowId])
+  @@index([userHighId])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  isArchived     Boolean      @default(false)
+  isMuted        Boolean      @default(false)
+  isPinned       Boolean      @default(false)
+  unreadCount    Int          @default(0)
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation("ParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, isArchived, isPinned])
+  @@index([userId, unreadCount])
+}
+
+model Message {
+  id                String                @id @default(cuid())
+  conversationId    String
+  senderId          String
+  type              MessageType           @default(TEXT)
+  content           String                @db.Text
+  attachments       Json?
+  deliveryStatus    MessageDeliveryStatus @default(SENT)
+  replyToId         String?
+  reactions         Json?
+  isEdited          Boolean               @default(false)
+  editedAt          DateTime?
+  deletedForUserIds String[]              @default([])
+  isDeletedForAll   Boolean               @default(false)
+  deletedForAllAt   DateTime?
+  readAt            DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  conversation      Conversation          @relation("ConversationMessages", fields: [conversationId], references: [id], onDelete: Cascade)
+  sender            User                  @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  replyTo           Message?              @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies           Message[]             @relation("MessageReplies")
+  lastInConversation Conversation?        @relation("LastMessageRelation")
+
+  @@index([conversationId, createdAt(sort: Asc)])
+  @@index([senderId, createdAt])
+  @@index([conversationId, deliveryStatus])
+}
+
 
 
 
