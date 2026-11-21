@@ -5,6 +5,7 @@ import { messageRepository } from '../../src/repositories/message.repository.js'
 import { blockRepository } from '../../src/repositories/block.repository.js';
 import { connectionRepository } from '../../src/repositories/connection.repository.js';
 import { privacyRepository } from '../../src/repositories/privacy.repository.js';
+import { mediaService } from '../../src/services/media/media.service.js';
 import { prisma } from '../../src/config/database.js';
 
 describe('Feature 11: Real-Time 1:1 Messaging System Unit Tests', () => {
@@ -259,6 +260,36 @@ describe('Feature 11: Real-Time 1:1 Messaging System Unit Tests', () => {
       expect(result.success).toBe(true);
       expect(result.mode).toBe('EVERYONE');
       expect(deleteForAllSpy).toHaveBeenCalledWith('msg-1');
+    });
+
+    it('deletes Cloudinary attachment with resource_type raw when deleting a PDF for everyone', async () => {
+      const mockMessage = {
+        id: 'msg-pdf-1',
+        conversationId: 'conv-1',
+        senderId: 'user-author',
+        attachments: [
+          {
+            publicId: 'alumni-connect/messages/user-author/sample-doc',
+            fileName: 'syllabus.pdf',
+            mimeType: 'application/pdf',
+          },
+        ],
+      };
+
+      vi.spyOn(messageRepository, 'findById').mockResolvedValueOnce(mockMessage as any);
+      vi.spyOn(conversationRepository, 'isParticipant').mockResolvedValueOnce(true);
+      vi.spyOn(messageRepository, 'markDeletedForAll').mockResolvedValueOnce({
+        ...mockMessage,
+        isDeletedForAll: true,
+      } as any);
+      const deleteAssetSpy = vi.spyOn(mediaService, 'deleteCloudinaryAsset').mockResolvedValueOnce(undefined as any);
+
+      const result = await messageService.deleteMessage('msg-pdf-1', 'user-author', 'EVERYONE');
+      expect(result.success).toBe(true);
+      expect(deleteAssetSpy).toHaveBeenCalledWith(
+        'alumni-connect/messages/user-author/sample-doc',
+        'raw',
+      );
     });
   });
 });

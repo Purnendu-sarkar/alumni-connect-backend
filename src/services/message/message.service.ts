@@ -292,7 +292,13 @@ export const messageService = {
     if (message.attachments && Array.isArray(message.attachments)) {
       for (const att of message.attachments as Array<{ publicId?: string; mimeType?: string }>) {
         if (att.publicId) {
-          const resType = att.mimeType?.startsWith('video/') ? 'video' : 'image';
+          const isVideo = att.mimeType?.startsWith('video/') || att.mimeType?.startsWith('audio/');
+          const isRaw =
+            att.mimeType?.startsWith('application/') ||
+            att.mimeType?.includes('pdf') ||
+            att.mimeType?.includes('document') ||
+            att.mimeType?.includes('spreadsheet');
+          const resType = isVideo ? 'video' : isRaw ? 'raw' : 'image';
           void mediaService.deleteCloudinaryAsset(att.publicId, resType);
         }
       }
