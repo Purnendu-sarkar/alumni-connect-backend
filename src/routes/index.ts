@@ -29,6 +29,7 @@ import { adminAnnouncementRouter } from './admin-announcement.routes.js';
 import { storyRouter } from './story.routes.js';
 import { adminStoryRouter } from './admin-story.routes.js';
 import { messageRouter } from './message.routes.js';
+import { publicRouter } from './public.routes.js';
 import {
   reportRouter,
   moderatorReportRouter,
@@ -82,6 +83,7 @@ apiRouter.use('/reports', reportRouter);
 apiRouter.use('/moderator/reports', moderatorReportRouter);
 apiRouter.use('/admin/reports', adminReportRouter);
 apiRouter.use('/admin/restrictions', adminRestrictionRouter);
+apiRouter.use('/public', publicRouter);
 
 // Removable Development Demo Module: gracefully mounts when present and enabled
 try {
