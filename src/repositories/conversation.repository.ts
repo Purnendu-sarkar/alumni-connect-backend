@@ -1,9 +1,9 @@
 import { prisma } from '../config/database.js';
-import type {
-  Conversation,
-  ConversationContext,
-  ConversationParticipant,
+import {
   Prisma,
+  type Conversation,
+  type ConversationContext,
+  type ConversationParticipant,
 } from '../generated/prisma/client.js';
 
 export function normalizeParticipantPair(idA: string, idB: string): { userLowId: string; userHighId: string } {
@@ -121,40 +121,78 @@ export const conversationRepository = {
       return existing;
     }
 
-    return prisma.conversation.create({
-      data: {
-        universityId,
-        userLowId,
-        userHighId,
-        contextType,
-        contextId,
-        createdById: creatorId,
-        participants: {
-          create: [
-            { userId: creatorId },
-            { userId: targetUserId },
-          ],
+    try {
+      return await prisma.conversation.create({
+        data: {
+          universityId,
+          userLowId,
+          userHighId,
+          contextType,
+          contextId,
+          createdById: creatorId,
+          participants: {
+            create: [
+              { userId: creatorId },
+              { userId: targetUserId },
+            ],
+          },
         },
-      },
-      include: {
-        participants: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                avatarUrl: true,
-                role: { select: { name: true } },
-                department: true,
-                position: true,
-                currentCompany: true,
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  avatarUrl: true,
+                  role: { select: { name: true } },
+                  department: true,
+                  position: true,
+                  currentCompany: true,
+                },
               },
             },
           },
+          lastMessage: true,
         },
-        lastMessage: true,
-      },
-    });
+      });
+    } catch (err: unknown) {
+      // Concurrency race condition: If another concurrent request created the conversation, query and return it
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const raceExisting = await prisma.conversation.findUnique({
+          where: {
+            universityId_userLowId_userHighId: {
+              universityId,
+              userLowId,
+              userHighId,
+            },
+          },
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    avatarUrl: true,
+                    role: { select: { name: true } },
+                    department: true,
+                    position: true,
+                    currentCompany: true,
+                  },
+                },
+              },
+            },
+            lastMessage: true,
+          },
+        });
+
+        if (raceExisting) {
+          return raceExisting;
+        }
+      }
+      throw err;
+    }
   },
 
   async findUserConversations(
