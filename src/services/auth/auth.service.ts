@@ -15,6 +15,7 @@ import {
 import { notificationService } from '../notification/notification.service.js';
 import { passwordService } from './password.service.js';
 import { tokenService } from './token.service.js';
+import { maskIp, parseDeviceName } from '../../utils/device-parser.js';
 
 interface RegisterInput {
   name: string;
@@ -61,11 +62,19 @@ function toSafeUser(user: AuthenticatedUserRecord) {
   };
 }
 
-export async function issueSession(user: AuthenticatedUserRecord, existingFamilyId?: string | null) {
+export async function issueSession(
+  user: AuthenticatedUserRecord,
+  existingFamilyId?: string | null,
+  context?: { ip?: string; userAgent?: string; deviceName?: string },
+) {
   const subject = { userId: user.id, universityId: user.universityId, role: user.role.name };
   const refresh = tokenService.createRefreshToken(subject);
   const accessToken = tokenService.createAccessToken(subject);
   const familyId = existingFamilyId || crypto.randomUUID();
+
+  const deviceName =
+    context?.deviceName ||
+    parseDeviceName(context?.userAgent);
 
   await tokenRepository.create({
     id: refresh.id,
@@ -74,6 +83,10 @@ export async function issueSession(user: AuthenticatedUserRecord, existingFamily
     userId: user.id,
     universityId: user.universityId,
     expiresAt: refresh.expiresAt,
+    userAgent: context?.userAgent,
+    ipAddress: context?.ip,
+    deviceName,
+    lastActiveAt: new Date(),
   });
 
   return {
@@ -343,7 +356,7 @@ export const authService = {
       requestId: context?.requestId,
     });
 
-    return issueSession(user);
+    return issueSession(user, null, context);
   },
 
   async validateSetupAccount(plainToken: string) {
@@ -379,7 +392,10 @@ export const authService = {
     };
   },
 
-  async setupAccount(input: { token: string; name: string; password: string }) {
+  async setupAccount(
+    input: { token: string; name: string; password: string },
+    context?: { ip?: string; userAgent?: string; requestId?: string },
+  ) {
     const { token, name, password } = input;
     if (!token || typeof token !== 'string') {
       throw ApiError.badRequest('A valid setup token is required.');
@@ -469,7 +485,7 @@ export const authService = {
       link: '/admin/users/moderators',
     });
 
-    return issueSession(user);
+    return issueSession(user, null, context);
   },
 
   async changePassword(
@@ -617,7 +633,7 @@ export const authService = {
       throw ApiError.unauthorized('This account is unavailable.');
     }
 
-    const nextSession = await issueSession(user, storedToken.familyId);
+    const nextSession = await issueSession(user, storedToken.familyId, context);
     await tokenRepository.revoke(storedToken.id, tokenService.hash(nextSession.refreshToken));
     return nextSession;
   },
@@ -753,7 +769,20 @@ export const authService = {
       metadata: { method: 'QUICK_ACCESS_SHOWCASE', role },
     });
 
-    return issueSession(user);
+    return issueSession(user, null, context);
+  },
+
+  async getLoginHistory(userId: string, limit = 15) {
+    const logs = await auditLogRepository.findLoginHistoryForUser(userId, limit);
+    return logs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      result: log.result,
+      maskedIp: maskIp(log.ip),
+      deviceName: parseDeviceName(log.userAgent),
+      userAgent: log.userAgent,
+      createdAt: log.createdAt.toISOString(),
+    }));
   },
 };
 

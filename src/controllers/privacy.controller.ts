@@ -24,4 +24,20 @@ export const privacyController = {
       data: updated,
     });
   }),
+
+  resetDefaults: asyncHandler(async (request, response) => {
+    const reset = await privacyService.resetPrivacyDefaults(
+      request.auth!.userId,
+      request.auth!.universityId,
+      {
+        ip: request.ip,
+        userAgent: request.headers['user-agent'] as string | undefined,
+        requestId: request.requestId,
+      },
+    );
+    return sendSuccess(response, {
+      message: 'Privacy settings reset to institutional defaults successfully.',
+      data: reset,
+    });
+  }),
 };

@@ -223,6 +223,7 @@ model University {
   slug             String             @unique
   domain           String             @unique
   branding         Json?
+  settings         Json?
   subscriptionPlan String             @default("free")
   isActive         Boolean            @default(true)
   isDemo           Boolean            @default(false)
@@ -291,6 +292,9 @@ model User {
   maxActiveMentees    Int                 @default(5)
   mentorshipTopics    String[]            @default([])
   isActive            Boolean             @default(true)
+  deactivatedAt       DateTime?           @db.Timestamptz(6)
+  deletionRequestedAt DateTime?           @db.Timestamptz(6)
+  deletedAt           DateTime?           @db.Timestamptz(6)
   isDemo              Boolean             @default(false)
   needPasswordChange  Boolean             @default(false)
   university          University          @relation(fields: [universityId], references: [id], onDelete: Restrict)
@@ -334,6 +338,7 @@ model User {
   conversationsCreated Conversation[]      @relation("ConversationCreator")
   conversationParticipations ConversationParticipant[] @relation("ParticipantUser")
   messagesSent        Message[]           @relation("MessageSender")
+  dataExports         DataExportRequest[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
@@ -392,6 +397,10 @@ model RefreshToken {
   replacedByTokenHash String?
   userId              String
   universityId        String
+  userAgent           String?
+  ipAddress           String?    @db.VarChar(64)
+  deviceName          String?    @db.VarChar(120)
+  lastActiveAt        DateTime   @default(now()) @db.Timestamptz(6)
   expiresAt           DateTime
   revokedAt           DateTime?
   createdAt           DateTime   @default(now())
@@ -399,8 +408,21 @@ model RefreshToken {
   university          University @relation(fields: [universityId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+  @@index([userId, revokedAt, expiresAt])
   @@index([universityId])
   @@index([familyId])
+}
+
+model DataExportRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  status    String   @default("COMPLETED")
+  payload   Json?
+  expiresAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Connection {

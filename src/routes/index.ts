@@ -18,6 +18,8 @@ import { mentorshipRouter, adminMentorshipRouter } from './mentorship.routes.js'
 import { moderatorJobRouter } from './moderator-job.routes.js';
 import { notificationRouter } from './notification.routes.js';
 import { privacyRouter } from './privacy.routes.js';
+import { sessionRouter } from './session.routes.js';
+import { accountRouter } from './account.routes.js';
 import { uploadRouter } from './upload.routes.js';
 import { userRouter } from './user.routes.js';
 import { eventRouter } from './event.routes.js';
@@ -54,6 +56,8 @@ apiRouter.use('/directory', directoryRouter);
 apiRouter.use('/connections', connectionRouter);
 apiRouter.use('/blocks', blockRouter);
 apiRouter.use('/privacy', privacyRouter);
+apiRouter.use('/sessions', sessionRouter);
+apiRouter.use('/account', accountRouter);
 apiRouter.use('/mentorship', mentorshipRouter);
 apiRouter.use('/admin/mentorship', adminMentorshipRouter);
 apiRouter.use('/departments', departmentRouter);

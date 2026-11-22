@@ -93,6 +93,7 @@ authRouter.post('/login', loginRateLimit, validate(loginSchema), authController.
 authRouter.post('/refresh', refreshRateLimit, authController.refresh);
 authRouter.post('/logout', authController.logout);
 authRouter.get('/me', authenticate, authController.me);
+authRouter.get('/login-history', authenticate, authController.getLoginHistory);
 authRouter.post(
   '/change-password',
   authenticate,

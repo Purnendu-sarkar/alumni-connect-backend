@@ -12,7 +12,7 @@ const refreshCookieOptions: CookieOptions = {
   httpOnly: true,
   secure: shouldUseSecureCookies,
   sameSite: 'lax',
-  path: '/api/v1/auth',
+  path: '/api/v1',
 };
 
 function writeRefreshCookie(response: Response, refreshToken: string, expiresAt: Date) {
@@ -85,7 +85,10 @@ export const authController = {
 
   setupAccount: asyncHandler(async (request, response) => {
     const { token, name, password } = request.body as { token: string; name: string; password: string };
-    const session = await authService.setupAccount({ token, name, password });
+    const session = await authService.setupAccount(
+      { token, name, password },
+      { ip: request.ip, userAgent: request.get('user-agent'), requestId: request.requestId },
+    );
     writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
     return sendSuccess(response, {
       statusCode: 201,
@@ -198,6 +201,15 @@ export const authController = {
     return sendSuccess(response, {
       message: `Signed in as ${session.user.name} (${role}).`,
       data: { accessToken: session.accessToken, user: session.user },
+    });
+  }),
+
+  getLoginHistory: asyncHandler(async (request, response) => {
+    const limit = request.query.limit ? parseInt(request.query.limit as string, 10) : 15;
+    const history = await authService.getLoginHistory(request.auth!.userId, limit);
+    return sendSuccess(response, {
+      message: 'Login activity history retrieved successfully.',
+      data: history,
     });
   }),
 };

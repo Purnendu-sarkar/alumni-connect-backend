@@ -1,4 +1,4 @@
-import type { RoleName } from '../generated/prisma/client.js';
+import type { Prisma, RoleName } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
 
 export const adminRepository = {
@@ -417,6 +417,42 @@ export const adminRepository = {
     return prisma.university.update({
       where: { id: universityId },
       data: { isActive },
+    });
+  },
+
+  getUniversitySettings(universityId: string) {
+    return prisma.university.findUnique({
+      where: { id: universityId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        domain: true,
+        isActive: true,
+        settings: true,
+      },
+    });
+  },
+
+  updateUniversitySettings(
+    universityId: string,
+    data: { name?: string; domain?: string; settings: Prisma.InputJsonValue },
+  ) {
+    return prisma.university.update({
+      where: { id: universityId },
+      data: {
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.domain ? { domain: data.domain } : {}),
+        settings: data.settings,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        domain: true,
+        isActive: true,
+        settings: true,
+      },
     });
   },
 };

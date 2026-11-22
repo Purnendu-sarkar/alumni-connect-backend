@@ -50,7 +50,10 @@ export const demoController = {
       throw ApiError.notFound(`Demo user record for role '${role}'`);
     }
 
-    const session = await issueSession(user);
+    const session = await issueSession(user, null, {
+      ip: request.ip,
+      userAgent: request.get('user-agent'),
+    });
     writeRefreshCookie(response, session.refreshToken, session.refreshExpiresAt);
 
     return sendSuccess(response, {

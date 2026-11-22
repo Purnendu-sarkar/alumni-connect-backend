@@ -55,6 +55,27 @@ export const privacyService = {
     return updated;
   },
 
+  async resetPrivacyDefaults(
+    userId: string,
+    universityId: string,
+    meta?: { ip?: string; userAgent?: string; requestId?: string },
+  ) {
+    const reset = await privacyRepository.resetDefaults(userId);
+    await cacheService.bumpVersion('dir');
+    await auditLogRepository.record({
+      universityId,
+      actorId: userId,
+      action: 'PRIVACY_SETTING_CHANGED',
+      targetType: 'privacy_setting',
+      targetId: reset.id,
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+      requestId: meta?.requestId,
+      metadata: { action: 'RESET_TO_DEFAULTS' },
+    });
+    return reset;
+  },
+
   isFieldVisible(scope: PrivacyScope | string | null | undefined, relationship: ViewerRelationship): boolean {
     if (relationship === 'BLOCKED') return false;
     if (relationship === 'SELF') return true;

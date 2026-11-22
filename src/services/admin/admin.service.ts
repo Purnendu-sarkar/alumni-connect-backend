@@ -17,6 +17,7 @@ import { emailService } from '../email/email.service.js';
 import { notificationService } from '../notification/notification.service.js';
 import { passwordResetService } from '../auth/password-reset.service.js';
 import { toPageMeta } from '../../utils/pagination.js';
+import type { AdminSettingsInput } from '../../validators/admin.schema.js';
 
 export interface UpdateAdminUserInput {
   name?: string;
@@ -935,5 +936,110 @@ export const adminService = {
     });
 
     return updated;
+  },
+
+  async getSettings(universityId: string) {
+    const uni = await adminRepository.getUniversitySettings(universityId);
+    if (!uni) throw ApiError.notFound('University settings');
+
+    const settings = (uni.settings as Record<string, unknown>) || {};
+
+    return {
+      universityName: uni.name,
+      domain: uni.domain,
+      allowedEmailDomains: Array.isArray(settings.allowedEmailDomains)
+        ? (settings.allowedEmailDomains as string[])
+        : [uni.domain],
+      requireEmailVerification: settings.requireEmailVerification !== false,
+      requireAlumniVerification: settings.requireAlumniVerification !== false,
+      moderatorAutoApproval: Boolean(settings.moderatorAutoApproval),
+      sessionTimeoutMin:
+        typeof settings.sessionTimeoutMin === 'number' ? settings.sessionTimeoutMin : 60,
+      maxActiveMentees:
+        typeof settings.maxActiveMentees === 'number' ? settings.maxActiveMentees : 5,
+      allowStudentJobApply: settings.allowStudentJobApply !== false,
+      allowAlumniMentorship: settings.allowAlumniMentorship !== false,
+    };
+  },
+
+  async updateSettings(
+    universityId: string,
+    input: AdminSettingsInput,
+    actorId: string,
+    meta?: { ip?: string; userAgent?: string; requestId?: string },
+  ) {
+    const uni = await adminRepository.getUniversitySettings(universityId);
+    if (!uni) throw ApiError.notFound('University settings');
+
+    const existingSettings = (uni.settings as Record<string, unknown>) || {};
+    const mergedSettings = {
+      ...existingSettings,
+      ...(input.allowedEmailDomains !== undefined
+        ? { allowedEmailDomains: input.allowedEmailDomains }
+        : {}),
+      ...(input.requireEmailVerification !== undefined
+        ? { requireEmailVerification: input.requireEmailVerification }
+        : {}),
+      ...(input.requireAlumniVerification !== undefined
+        ? { requireAlumniVerification: input.requireAlumniVerification }
+        : {}),
+      ...(input.moderatorAutoApproval !== undefined
+        ? { moderatorAutoApproval: input.moderatorAutoApproval }
+        : {}),
+      ...(input.sessionTimeoutMin !== undefined
+        ? { sessionTimeoutMin: input.sessionTimeoutMin }
+        : {}),
+      ...(input.maxActiveMentees !== undefined
+        ? { maxActiveMentees: input.maxActiveMentees }
+        : {}),
+      ...(input.allowStudentJobApply !== undefined
+        ? { allowStudentJobApply: input.allowStudentJobApply }
+        : {}),
+      ...(input.allowAlumniMentorship !== undefined
+        ? { allowAlumniMentorship: input.allowAlumniMentorship }
+        : {}),
+    };
+
+    const updated = await adminRepository.updateUniversitySettings(universityId, {
+      name: input.universityName,
+      domain: input.domain,
+      settings: mergedSettings as Prisma.InputJsonValue,
+    });
+
+    await cacheService.del('settings:v1');
+    await cacheService.del(`settings:${universityId}`);
+
+    await auditLogRepository.record({
+      universityId,
+      actorId,
+      action: 'SYSTEM_SETTINGS_UPDATED',
+      targetType: 'system_settings',
+      targetId: universityId,
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+      requestId: meta?.requestId,
+      metadata: input,
+    });
+
+    return {
+      universityName: updated.name,
+      domain: updated.domain,
+      allowedEmailDomains: Array.isArray(mergedSettings.allowedEmailDomains)
+        ? (mergedSettings.allowedEmailDomains as string[])
+        : [updated.domain],
+      requireEmailVerification: mergedSettings.requireEmailVerification !== false,
+      requireAlumniVerification: mergedSettings.requireAlumniVerification !== false,
+      moderatorAutoApproval: Boolean(mergedSettings.moderatorAutoApproval),
+      sessionTimeoutMin:
+        typeof mergedSettings.sessionTimeoutMin === 'number'
+          ? mergedSettings.sessionTimeoutMin
+          : 60,
+      maxActiveMentees:
+        typeof mergedSettings.maxActiveMentees === 'number'
+          ? mergedSettings.maxActiveMentees
+          : 5,
+      allowStudentJobApply: mergedSettings.allowStudentJobApply !== false,
+      allowAlumniMentorship: mergedSettings.allowAlumniMentorship !== false,
+    };
   },
 };

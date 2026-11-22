@@ -66,4 +66,29 @@ export const privacyRepository = {
       },
     });
   },
+
+  async resetDefaults(userId: string): Promise<PrivacySetting> {
+    const defaults = {
+      profileVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      emailVisibility: 'CONNECTIONS_ONLY' as PrivacyScope,
+      phoneVisibility: 'CONNECTIONS_ONLY' as PrivacyScope,
+      locationVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      careerVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      educationVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      skillsVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      connectionsVisibility: 'CONNECTIONS_ONLY' as PrivacyScope,
+      mentorshipVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      searchVisibility: 'ALL_MEMBERS' as PrivacyScope,
+      messagingPermission: 'CONNECTIONS_ONLY' as PrivacyScope,
+    };
+
+    return prisma.privacySetting.upsert({
+      where: { userId },
+      update: defaults,
+      create: {
+        userId,
+        ...defaults,
+      },
+    });
+  },
 };

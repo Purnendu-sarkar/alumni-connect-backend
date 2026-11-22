@@ -1215,8 +1215,117 @@ async function main() {
 
   console.log('[OK] 4 Realistic incident reports and audit action trails provisioned.');
 
-  // STEP 10: Flush Redis Caches
-  console.log('\n>>> [STEP 10/10] Invalidating & Flushing Redis Caches...');
+  // STEP 10: Provision Showcase Login History and Active Sessions
+  console.log('\n>>> [STEP 10/11] Provisioning Showcase Login History & Active Browser Sessions...');
+  const users = [
+    { record: superAdmin, roleName: RoleName.SUPER_ADMIN, device: 'Chrome on Windows' },
+    { record: moderator, roleName: RoleName.MODERATOR, device: 'Firefox on Linux' },
+    { record: alumni, roleName: RoleName.ALUMNI, device: 'Chrome on macOS' },
+    { record: student, roleName: RoleName.STUDENT, device: 'Edge on Windows' },
+  ];
+
+  for (const u of users) {
+    // 1. Ensure realistic Login History in AuditLog
+    const existingLogins = await prisma.auditLog.count({
+      where: {
+        actorId: u.record.id,
+        action: { in: ['LOGIN_SUCCESS', 'LOGIN_FAILED', 'USER_LOGIN'] },
+      },
+    });
+
+    if (existingLogins < 3) {
+      await prisma.auditLog.createMany({
+        data: [
+          {
+            universityId: university.id,
+            actorId: u.record.id,
+            actorRole: u.roleName,
+            action: 'LOGIN_SUCCESS',
+            result: 'SUCCESS',
+            targetType: 'user',
+            targetId: u.record.id,
+            ip: '103.114.98.42',
+            userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+          },
+          {
+            universityId: university.id,
+            actorId: u.record.id,
+            actorRole: u.roleName,
+            action: 'LOGIN_SUCCESS',
+            result: 'SUCCESS',
+            targetType: 'user',
+            targetId: u.record.id,
+            ip: '103.114.98.50',
+            userAgent:
+              'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+            createdAt: new Date(Date.now() - 28 * 60 * 60 * 1000), // 28 hours ago
+          },
+          {
+            universityId: university.id,
+            actorId: u.record.id,
+            actorRole: u.roleName,
+            action: 'LOGIN_FAILED',
+            result: 'FAILURE',
+            targetType: 'user',
+            targetId: u.record.id,
+            ip: '185.220.101.5',
+            userAgent:
+              'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0',
+            metadata: { reason: 'CURRENT_PASSWORD_INVALID' },
+            createdAt: new Date(Date.now() - 72 * 60 * 60 * 1000), // 3 days ago
+          },
+        ],
+      });
+    }
+
+    // 2. Ensure realistic Active Sessions in RefreshToken
+    const activeTokens = await prisma.refreshToken.findMany({
+      where: {
+        userId: u.record.id,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (activeTokens.length === 0) {
+      await prisma.refreshToken.createMany({
+        data: [
+          {
+            id: `showcase-session-${u.roleName.toLowerCase()}-1`,
+            tokenHash: `hash-${u.record.id}-desktop-1`,
+            familyId: `fam-${u.record.id}-1`,
+            userId: u.record.id,
+            universityId: university.id,
+            deviceName: u.device,
+            ipAddress: '103.114.98.42',
+            userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            lastActiveAt: new Date(Date.now() - 15 * 60 * 1000), // 15 mins ago
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
+          {
+            id: `showcase-session-${u.roleName.toLowerCase()}-2`,
+            tokenHash: `hash-${u.record.id}-mobile-2`,
+            familyId: `fam-${u.record.id}-2`,
+            userId: u.record.id,
+            universityId: university.id,
+            deviceName: 'Safari on iPhone',
+            ipAddress: '103.114.98.77',
+            userAgent:
+              'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+            lastActiveAt: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
+            expiresAt: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000),
+          },
+        ],
+      });
+    }
+  }
+  console.log('[OK] Rich login history and active session records provisioned for all 4 accounts.');
+
+  // STEP 11: Flush Redis Caches
+  console.log('\n>>> [STEP 11/11] Invalidating & Flushing Redis Caches...');
   try {
     await Promise.all([
       cacheService.bumpVersion('dir'),

@@ -272,4 +272,29 @@ export const adminController = {
       data: user,
     });
   }),
+
+  getSettings: asyncHandler(async (request, response) => {
+    const settings = await adminService.getSettings(request.auth!.universityId);
+    return sendSuccess(response, {
+      message: 'Platform governance settings retrieved successfully.',
+      data: settings,
+    });
+  }),
+
+  updateSettings: asyncHandler(async (request, response) => {
+    const updated = await adminService.updateSettings(
+      request.auth!.universityId,
+      request.body,
+      request.auth!.userId,
+      {
+        ip: request.ip,
+        userAgent: request.headers['user-agent'] as string | undefined,
+        requestId: request.requestId,
+      },
+    );
+    return sendSuccess(response, {
+      message: 'Platform governance settings updated and persisted successfully.',
+      data: updated,
+    });
+  }),
 };

@@ -153,4 +153,15 @@ export const auditLogRepository = {
 
     return { logs, total };
   },
+
+  async findLoginHistoryForUser(userId: string, limit = 15) {
+    return prisma.auditLog.findMany({
+      where: {
+        actorId: userId,
+        action: { in: ['LOGIN_SUCCESS', 'LOGIN_FAILED', 'USER_LOGIN', 'PASSWORD_CHANGED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(1, limit), 50),
+    });
+  },
 };

@@ -112,3 +112,18 @@ export const auditLogQuerySchema = z.object({
   startDate: z.string().trim().optional(),
   endDate: z.string().trim().optional(),
 });
+
+export const adminSettingsSchema = z.object({
+  universityName: z.string().trim().min(2).max(120).optional(),
+  domain: z.string().trim().min(3).max(100).optional(),
+  allowedEmailDomains: z.array(z.string().trim()).optional(),
+  requireEmailVerification: z.boolean().optional(),
+  requireAlumniVerification: z.boolean().optional(),
+  moderatorAutoApproval: z.boolean().optional(),
+  sessionTimeoutMin: z.number().int().min(15).max(1440).optional(),
+  maxActiveMentees: z.number().int().min(1).max(20).optional(),
+  allowStudentJobApply: z.boolean().optional(),
+  allowAlumniMentorship: z.boolean().optional(),
+});
+
+export type AdminSettingsInput = z.infer<typeof adminSettingsSchema>;

@@ -10,3 +10,4 @@ export const privacyRouter = Router();
 privacyRouter.use(authenticate);
 privacyRouter.get('/me', privacyController.getMine);
 privacyRouter.patch('/me', validate(updatePrivacySchema), privacyController.updateMine);
+privacyRouter.post('/reset-defaults', privacyController.resetDefaults);

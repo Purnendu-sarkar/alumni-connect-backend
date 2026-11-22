@@ -7,6 +7,7 @@ import { requirePermission, requireRole } from '../middlewares/permission.middle
 import { validate } from '../middlewares/validation.middleware.js';
 import {
   adminUsersQuerySchema,
+  adminSettingsSchema,
   auditLogQuerySchema,
   changeUserRoleSchema,
   invitationIdParamSchema,
@@ -226,4 +227,20 @@ adminRouter.patch(
   requireRole('SUPER_ADMIN'),
   requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
   adminController.toggleUniversityStatus,
+);
+
+// System Governance Settings Endpoints
+adminRouter.get(
+  '/settings',
+  requireRole('SUPER_ADMIN'),
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  adminController.getSettings,
+);
+
+adminRouter.patch(
+  '/settings',
+  requireRole('SUPER_ADMIN'),
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  validate(adminSettingsSchema),
+  adminController.updateSettings,
 );
