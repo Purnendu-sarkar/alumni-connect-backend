@@ -12,6 +12,13 @@ export const notificationIdParamSchema = z.object({
   id: z.string().trim().min(1, 'Notification ID is required.'),
 });
 
+const MANDATORY_PREFERENCE_TYPES = new Set<NotificationType>([
+  'SECURITY_ALERT',
+  'ACCOUNT_VERIFICATION',
+  'RESTRICTION_APPLIED',
+  'RESTRICTION_ENDED',
+]);
+
 export const updateNotificationPreferencesSchema = z.object({
   preferences: z
     .array(
@@ -21,5 +28,14 @@ export const updateNotificationPreferencesSchema = z.object({
         email: z.boolean().optional(),
       }),
     )
-    .min(1, 'At least one notification preference update is required.'),
+    .min(1, 'At least one notification preference update is required.')
+    .refine(
+      (prefs) =>
+        !prefs.some(
+          (p) => MANDATORY_PREFERENCE_TYPES.has(p.type) && p.inApp === false,
+        ),
+      {
+        message: 'Mandatory security and account notifications cannot be disabled',
+      },
+    ),
 });

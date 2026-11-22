@@ -2,6 +2,7 @@ import type { NotificationType, Prisma } from '../../generated/prisma/client.js'
 import { logger } from '../../config/logger.js';
 import { notificationRepository } from '../../repositories/notification.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
+import { cacheService } from '../cache/cache.service.js';
 import { toPageMeta } from '../../utils/pagination.js';
 
 const MANDATORY_TYPES = new Set<NotificationType>([
@@ -52,10 +53,12 @@ export const notificationService = {
         }
       }
 
-      return await notificationRepository.create({
+      const created = await notificationRepository.create({
         ...input,
         link: sanitizedLink,
       });
+      await cacheService.del(`user:${input.userId}:notif_unread`);
+      return created;
     } catch (error) {
       logger.warn({ error, userId: input.userId, type: input.type }, 'Failed to deliver notification to user.');
       return null;
@@ -78,6 +81,7 @@ export const notificationService = {
       }));
 
       await notificationRepository.createMany(notifications);
+      await Promise.all(users.map((u) => cacheService.del(`user:${u.id}:notif_unread`)));
       return notifications;
     } catch (error) {
       logger.warn({ error, roles: input.roles, type: input.type }, 'Failed to broadcast notification to roles.');
@@ -125,22 +129,32 @@ export const notificationService = {
   },
 
   async getUnreadCount(userId: string) {
+    const cacheKey = `user:${userId}:notif_unread`;
+    const cached = await cacheService.get<{ unreadCount: number }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
     const unreadCount = await notificationRepository.countUnreadByUser(userId);
-    return { unreadCount };
+    const result = { unreadCount };
+    await cacheService.set(cacheKey, result, 60);
+    return result;
   },
 
   async markAsRead(id: string, userId: string) {
     await notificationRepository.markAsRead(id, userId);
+    await cacheService.del(`user:${userId}:notif_unread`);
     return { success: true };
   },
 
   async markAllAsRead(userId: string) {
     await notificationRepository.markAllAsRead(userId);
+    await cacheService.del(`user:${userId}:notif_unread`);
     return { success: true };
   },
 
   async deleteNotification(id: string, userId: string) {
     await notificationRepository.deleteById(id, userId);
+    await cacheService.del(`user:${userId}:notif_unread`);
     return { success: true };
   },
 

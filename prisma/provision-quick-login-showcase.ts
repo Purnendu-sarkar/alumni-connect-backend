@@ -18,6 +18,10 @@ import {
   JobStatus,
   MessageDeliveryStatus,
   MessageType,
+  NotificationType,
+  ReportStatus,
+  ReportType,
+  RoleName,
   RsvpStatus,
   StoryCategory,
   StoryModerationAction,
@@ -832,8 +836,387 @@ async function main() {
 
   console.log('[OK] 1:1 Messaging conversations and unread badges provisioned.');
 
-  // STEP 9: Flush Redis Caches
-  console.log('\n>>> [STEP 9/9] Invalidating & Flushing Redis Caches...');
+  // STEP 9: Feature 12 & 13 — Notifications, Moderation Incident Reports & Snapshots
+  console.log('\n>>> [STEP 9/10] Provisioning Feature 12 & 13 Notifications & Reports...');
+
+  // 9.1: Clean previous showcase notifications for idempotency
+  await prisma.notification.deleteMany({
+    where: {
+      userId: { in: [superAdmin.id, moderator.id, alumni.id, student.id] },
+    },
+  });
+
+  // Provision Notifications for Kazi Moinul Islam (Moderator)
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: moderator.id,
+        type: NotificationType.MODERATION_RESULT,
+        title: 'Job Moderation Queue Alert',
+        body: 'A new job posting was submitted and awaits review.',
+        link: '/moderator/jobs',
+        readAt: null,
+        createdAt: new Date(Date.now() - 30 * 60 * 1000),
+      },
+      {
+        userId: moderator.id,
+        type: NotificationType.MODERATION_RESULT,
+        title: 'Content Incident Escalation',
+        body: 'An incident report was escalated for safety review.',
+        link: '/moderator/reports',
+        readAt: null,
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      },
+      {
+        userId: moderator.id,
+        type: NotificationType.SECURITY_ALERT,
+        title: 'Admin Session Authenticated',
+        body: 'Moderator elevated privileges were verified.',
+        link: '/login',
+        readAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
+      },
+      {
+        userId: moderator.id,
+        type: NotificationType.SYSTEM_ANNOUNCEMENT,
+        title: 'Campus Guidelines Updated',
+        body: 'Spring semester community moderation standards have been published.',
+        link: '/announcements',
+        readAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+    ],
+  });
+
+  // Provision Notifications for Arif Gazi (Alumni)
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: alumni.id,
+        type: NotificationType.MENTORSHIP_REQUEST,
+        title: 'New Mentorship Request',
+        body: 'Soumya Miah requested career mentorship in Software Engineering.',
+        link: '/alumni/mentorship/requests',
+        readAt: null,
+        createdAt: new Date(Date.now() - 45 * 60 * 1000),
+      },
+      {
+        userId: alumni.id,
+        type: NotificationType.APPLICATION_RECEIVED,
+        title: 'Job Application Received',
+        body: 'A new candidate applied for Senior Software Engineer.',
+        link: '/alumni/applications/received',
+        readAt: null,
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      },
+      {
+        userId: alumni.id,
+        type: NotificationType.JOB_APPROVED,
+        title: 'Job Listing Approved',
+        body: 'Your posting for Senior Software Engineer is now published.',
+        link: '/alumni/jobs/my-jobs',
+        readAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
+      },
+      {
+        userId: alumni.id,
+        type: NotificationType.CONNECTION_REQUEST,
+        title: 'New Connection Request',
+        body: 'Soumya Miah sent you a connection request.',
+        link: '/alumni/connections?tab=received',
+        readAt: new Date(Date.now() - 10 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 14 * 60 * 60 * 1000),
+      },
+    ],
+  });
+
+  // Provision Notifications for Soumya Miah (Student)
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: student.id,
+        type: NotificationType.MENTORSHIP_DECISION,
+        title: 'Mentorship Request Accepted',
+        body: 'Arif Gazi accepted your mentorship request in Full-Stack Engineering Architecture.',
+        link: '/student/mentorship',
+        readAt: null,
+        createdAt: new Date(Date.now() - 15 * 60 * 1000),
+      },
+      {
+        userId: student.id,
+        type: NotificationType.APPLICATION_UPDATE,
+        title: 'Application Shortlisted',
+        body: 'Your application for Senior Software Engineer was shortlisted.',
+        link: '/student/applications',
+        readAt: null,
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      },
+      {
+        userId: student.id,
+        type: NotificationType.SYSTEM_ANNOUNCEMENT,
+        title: 'Spring Campus Career Fair 2026',
+        body: 'Annual career fair schedule and participating tech employers announced.',
+        link: '/announcements',
+        readAt: new Date(Date.now() - 18 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 36 * 60 * 60 * 1000),
+      },
+    ],
+  });
+
+  // Provision Notifications for Platform Super Admin
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: superAdmin.id,
+        type: NotificationType.SECURITY_ALERT,
+        title: 'System Health Check Completed',
+        body: 'Automated database and Redis integrity scan passed with zero anomalies.',
+        link: '/admin/overview',
+        readAt: null,
+        createdAt: new Date(Date.now() - 10 * 60 * 1000),
+      },
+      {
+        userId: superAdmin.id,
+        type: NotificationType.SYSTEM_ANNOUNCEMENT,
+        title: 'Quarterly Infrastructure Upgrade',
+        body: 'Platform maintenance scheduled for next month.',
+        link: '/announcements',
+        readAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+      },
+    ],
+  });
+  console.log('[OK] Realistic notifications provisioned across all 4 showcase accounts.');
+
+  // 9.2: Provision 4 Realistic Reports & Audit Action Timelines
+  console.log('>>> Provisioning 4 Realistic Incident Reports & Moderation Timelines...');
+
+  // Target 1: Misleading Job Posting
+  const candidateReportJob = await prisma.job.findFirst({
+    where: { universityId: university.id, postedById: { not: alumni.id } },
+    include: { postedBy: true },
+  });
+
+  if (candidateReportJob) {
+    await prisma.report.deleteMany({
+      where: { universityId: university.id, targetType: 'JOB', targetId: candidateReportJob.id },
+    });
+
+    const jobSnapshot = {
+      targetType: 'JOB',
+      targetId: candidateReportJob.id,
+      title: candidateReportJob.title,
+      company: candidateReportJob.company,
+      location: candidateReportJob.location,
+      workMode: candidateReportJob.workMode,
+      employmentType: candidateReportJob.employmentType,
+      salaryRange:
+        candidateReportJob.salaryMin && candidateReportJob.salaryMax
+          ? `${candidateReportJob.salaryMin} - ${candidateReportJob.salaryMax} BDT`
+          : 'Negotiable',
+      postedBy: {
+        id: candidateReportJob.postedById,
+        name: candidateReportJob.postedBy.name,
+        email: candidateReportJob.postedBy.email,
+      },
+    };
+
+    await prisma.report.create({
+      data: {
+        universityId: university.id,
+        reportedById: student.id,
+        reportedUserId: candidateReportJob.postedById,
+        targetType: 'JOB',
+        targetId: candidateReportJob.id,
+        type: ReportType.MISLEADING_JOB,
+        reason:
+          'Suspicious Job / Possible Advance Fee Scam: The employer requested an upfront application processing fee via mobile banking prior to screening, which violates university hiring ethics and student protection policies.',
+        status: ReportStatus.OPEN,
+        snapshot: jobSnapshot,
+        createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+      },
+    });
+  }
+
+  // Target 2: Impersonation / Fake Profile
+  const impersonatedTarget = peerStudents[10]!;
+  await prisma.report.deleteMany({
+    where: { universityId: university.id, targetType: 'USER', targetId: impersonatedTarget.id },
+  });
+
+  const studentSnapshot = {
+    targetType: 'USER',
+    targetId: impersonatedTarget.id,
+    name: impersonatedTarget.name,
+    email: impersonatedTarget.email,
+    role: 'STUDENT',
+    department: impersonatedTarget.department,
+    graduationYear: impersonatedTarget.graduationYear,
+  };
+
+  await prisma.report.create({
+    data: {
+      universityId: university.id,
+      reportedById: alumni.id,
+      reportedUserId: impersonatedTarget.id,
+      targetType: 'USER',
+      targetId: impersonatedTarget.id,
+      type: ReportType.FAKE_PROFILE,
+      reason:
+        'Impersonating Faculty Member: This profile claims to be an adjunct professor and has been privately messaging undergraduate students asking for personal phone numbers and institutional credentials.',
+      status: ReportStatus.OPEN,
+      snapshot: studentSnapshot,
+      createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
+    },
+  });
+
+  // Target 3: Unsolicited Commercial Spam Message
+  const spamSender = peerStudents[14]!;
+  const spamConvLow = student.id < spamSender.id ? student.id : spamSender.id;
+  const spamConvHigh = student.id < spamSender.id ? spamSender.id : student.id;
+
+  const spamConv = await prisma.conversation.upsert({
+    where: {
+      universityId_userLowId_userHighId: {
+        universityId: university.id,
+        userLowId: spamConvLow,
+        userHighId: spamConvHigh,
+      },
+    },
+    update: {},
+    create: {
+      universityId: university.id,
+      userLowId: spamConvLow,
+      userHighId: spamConvHigh,
+      contextType: ConversationContext.DIRECT,
+      createdById: spamSender.id,
+    },
+  });
+
+  const spamMsg = await prisma.message.create({
+    data: {
+      conversationId: spamConv.id,
+      senderId: spamSender.id,
+      type: MessageType.TEXT,
+      content:
+        'Click here to earn quick cash on university campus! Guaranteed 500 BDT per day: https://unverified-affiliate-portal.example.com',
+      deliveryStatus: MessageDeliveryStatus.DELIVERED,
+      createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
+    },
+  });
+
+  await prisma.report.deleteMany({
+    where: { universityId: university.id, targetType: 'MESSAGE', targetId: spamMsg.id },
+  });
+
+  const messageSnapshot = {
+    targetType: 'MESSAGE',
+    targetId: spamMsg.id,
+    content: spamMsg.content,
+    senderId: spamMsg.senderId,
+    senderName: spamSender.name,
+    createdAt: spamMsg.createdAt,
+  };
+
+  const report3 = await prisma.report.create({
+    data: {
+      universityId: university.id,
+      reportedById: student.id,
+      reportedUserId: spamSender.id,
+      targetType: 'MESSAGE',
+      targetId: spamMsg.id,
+      type: ReportType.SPAM,
+      reason:
+        'Unsolicited commercial affiliate marketing in chat: Sent repetitive unsolicited promotional affiliate links in direct messages despite repeated requests to cease.',
+      status: ReportStatus.UNDER_REVIEW,
+      reviewerId: moderator.id,
+      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      snapshot: messageSnapshot,
+      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
+    },
+  });
+
+  await prisma.reportAction.create({
+    data: {
+      reportId: report3.id,
+      actorId: moderator.id,
+      actorRole: RoleName.MODERATOR,
+      actionType: 'STATUS_CHANGE',
+      note: 'Claimed by Moderator Kazi Moinul Islam for investigation.',
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    },
+  });
+
+  // Target 4: Inappropriate Content in Success Story
+  const targetStory = await prisma.successStory.findFirst({
+    where: { universityId: university.id, authorId: { not: alumni.id } },
+    include: { author: true },
+  });
+
+  if (targetStory) {
+    await prisma.report.deleteMany({
+      where: { universityId: university.id, targetType: 'STORY', targetId: targetStory.id },
+    });
+
+    const storySnapshot = {
+      targetType: 'STORY',
+      targetId: targetStory.id,
+      title: targetStory.title,
+      summary: targetStory.summary,
+      authorId: targetStory.authorId,
+      authorName: targetStory.author?.name,
+      category: targetStory.category,
+    };
+
+    const report4 = await prisma.report.create({
+      data: {
+        universityId: university.id,
+        reportedById: student.id,
+        reportedUserId: targetStory.authorId,
+        targetType: 'STORY',
+        targetId: targetStory.id,
+        type: ReportType.INAPPROPRIATE_CONTENT,
+        reason:
+          'Commercial solicitation violation in article: Article contained direct unauthorized marketing and external referral codes disguised as career advice.',
+        status: ReportStatus.RESOLVED,
+        reviewerId: moderator.id,
+        resolverId: moderator.id,
+        resolution: 'HIDE_CONTENT',
+        resolutionNote: 'Content unpublished and author warned regarding promotional standards.',
+        claimedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        resolvedAt: new Date(Date.now() - 22 * 60 * 60 * 1000),
+        snapshot: storySnapshot,
+        createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
+      },
+    });
+
+    await prisma.reportAction.createMany({
+      data: [
+        {
+          reportId: report4.id,
+          actorId: moderator.id,
+          actorRole: RoleName.MODERATOR,
+          actionType: 'STATUS_CHANGE',
+          note: 'Claimed by Moderator for content compliance check.',
+          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+        {
+          reportId: report4.id,
+          actorId: moderator.id,
+          actorRole: RoleName.MODERATOR,
+          actionType: 'RESOLUTION_APPLIED',
+          note: 'Content unpublished and author issued formal warning on commercial terms.',
+          metadata: { resolution: 'HIDE_CONTENT' },
+          createdAt: new Date(Date.now() - 22 * 60 * 60 * 1000),
+        },
+      ],
+    });
+  }
+
+  console.log('[OK] 4 Realistic incident reports and audit action trails provisioned.');
+
+  // STEP 10: Flush Redis Caches
+  console.log('\n>>> [STEP 10/10] Invalidating & Flushing Redis Caches...');
   try {
     await Promise.all([
       cacheService.bumpVersion('dir'),
@@ -849,6 +1232,7 @@ async function main() {
       cacheService.delPattern('events:*'),
       cacheService.delPattern('ann:*'),
       cacheService.delPattern('stories:*'),
+      cacheService.delPattern('user:*:notif_unread'),
     ]);
     console.log('[OK] All Redis cache versions bumped and pattern keys invalidated.');
   } catch (err) {

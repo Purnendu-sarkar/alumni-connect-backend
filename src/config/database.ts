@@ -15,7 +15,8 @@ const parsedSchema = (() => {
 const adapter = new PrismaPg(
   {
     connectionString: env.DATABASE_URL,
-    connectionTimeoutMillis: 5_000,
+    connectionTimeoutMillis: 30_000,
+    idleTimeoutMillis: 30_000,
   },
   parsedSchema ? { schema: parsedSchema } : undefined,
 );

@@ -110,9 +110,27 @@ enum ContentStatus {
 
 enum ReportStatus {
   OPEN
+  UNDER_REVIEW
   REVIEWED
   RESOLVED
+  REJECTED
   DISMISSED
+  ESCALATED
+}
+
+enum ReportType {
+  INAPPROPRIATE_CONTENT
+  FAKE_PROFILE
+  SPAM
+  MISLEADING_JOB
+  HARASSMENT
+  OTHER
+}
+
+enum RestrictionType {
+  MESSAGING
+  JOB_POSTING
+  MENTORSHIP_REQUESTS
 }
 
 enum MediaType {
@@ -218,6 +236,7 @@ model University {
   contents         Content[]
   stories          SuccessStory[]
   reports          Report[]
+  restrictions     UserRestriction[]
   mediaAssets      MediaAsset[]
   adSlots          AdSlot[]
   analyticsEvents  AnalyticsEvent[]
@@ -293,6 +312,12 @@ model User {
   jobModerations      JobModerationRecord[]         @relation("JobModActor")
   jobAppStatusChanges JobApplicationStatusHistory[] @relation("JobAppHistoryActor")
   reportsFiled        Report[]            @relation("ReportReporter")
+  reportsReceived     Report[]            @relation("ReportedUser")
+  reportsReviewed     Report[]            @relation("ReportReviewer")
+  reportsResolved     Report[]            @relation("ReportResolver")
+  reportActions       ReportAction[]      @relation("ReportActionActor")
+  restrictionsReceived UserRestriction[]  @relation("RestrictionSubject")
+  restrictionsCreated  UserRestriction[]  @relation("RestrictionCreator")
   eventsCreated       Event[]             @relation("EventCreator")
   eventRsvps          EventRsvp[]         @relation("RsvpUser")
   announcements       Announcement[]      @relation("AnnouncementAuthor")
@@ -694,22 +719,79 @@ model Content {
 }
 
 model Report {
-  id           String       @id @default(cuid())
-  universityId String
-  reportedById String
-  targetType   String
-  targetId     String
-  reason       String
-  status       ReportStatus @default(OPEN)
-  resolution   String?
-  resolvedAt   DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  university   University   @relation(fields: [universityId], references: [id], onDelete: Cascade)
-  reportedBy   User         @relation("ReportReporter", fields: [reportedById], references: [id], onDelete: Restrict)
+  id             String       @id @default(cuid())
+  universityId   String
+  reportedById   String
+  reportedUserId String?
+  reviewerId     String?
+  resolverId     String?
+  targetType     String
+  targetId       String
+  type           ReportType   @default(OTHER)
+  reason         String
+  status         ReportStatus @default(OPEN)
+  resolution     String?
+  resolutionNote String?
+  snapshot       Json?
+  claimedAt      DateTime?
+  escalatedAt    DateTime?
+  overturnedAt   DateTime?
+  overturnedById String?
+  overturnReason String?
+  resolvedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@index([universityId, status, createdAt])
+  university     University   @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  reportedBy     User         @relation("ReportReporter", fields: [reportedById], references: [id], onDelete: Restrict)
+  reportedUser   User?        @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  reviewer       User?        @relation("ReportReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  resolver       User?        @relation("ReportResolver", fields: [resolverId], references: [id], onDelete: SetNull)
+  actions        ReportAction[]
+
+  @@index([universityId, status, createdAt(sort: Desc)])
+  @@index([reportedUserId])
   @@index([targetType, targetId])
+}
+
+model ReportAction {
+  id         String   @id @default(cuid())
+  reportId   String
+  actorId    String
+  actorRole  RoleName
+  actionType String
+  note       String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actor      User     @relation("ReportActionActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([reportId, createdAt])
+  @@index([actorId, createdAt(sort: Desc)])
+}
+
+model UserRestriction {
+  id             String          @id @default(cuid())
+  universityId   String
+  userId         String
+  type           RestrictionType
+  reason         String
+  startsAt       DateTime        @default(now())
+  endsAt         DateTime
+  createdById    String
+  sourceReportId String?
+  revokedAt      DateTime?
+  revokedById    String?
+  revokeReason   String?
+  createdAt      DateTime        @default(now())
+
+  university     University      @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  user           User            @relation("RestrictionSubject", fields: [userId], references: [id], onDelete: Restrict)
+  createdBy      User            @relation("RestrictionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([userId, type, endsAt])
+  @@index([universityId, endsAt])
 }
 
 model MediaAsset {

@@ -4,6 +4,7 @@ import { mentorshipPresenter } from '../../presenters/mentorship.presenter.js';
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { blockRepository } from '../../repositories/block.repository.js';
 import { mentorshipRepository } from '../../repositories/mentorship.repository.js';
+import { restrictionRepository } from '../../repositories/restriction.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
 import { cacheService } from '../cache/cache.service.js';
 import { notificationService } from '../notification/notification.service.js';
@@ -21,6 +22,18 @@ export const mentorshipService = {
     expectedDuration?: string;
     meta?: { ip?: string; userAgent?: string; requestId?: string };
   }) {
+    const activeRestriction = await restrictionRepository.findActiveRestriction(
+      input.studentId,
+      'MENTORSHIP_REQUESTS',
+    );
+    if (activeRestriction) {
+      throw new ApiError(
+        403,
+        `Your mentorship request privileges are temporarily restricted until ${activeRestriction.endsAt.toISOString()}`,
+        'USER_RESTRICTED',
+      );
+    }
+
     if (input.studentId === input.mentorId) {
       throw ApiError.badRequest('You cannot request mentorship from yourself.');
     }
@@ -406,7 +419,7 @@ export const mentorshipService = {
       type: 'MENTORSHIP_DECISION',
       title: 'Mentorship Concluded',
       body: 'Your mentorship collaboration has been concluded.',
-      link: item.mentorId === input.userId ? '/student/mentorship' : '/alumni/mentorship/history',
+      link: item.mentorId === input.userId ? '/student/mentorship' : '/alumni/mentorship/requests',
     });
 
     await auditLogRepository.record({

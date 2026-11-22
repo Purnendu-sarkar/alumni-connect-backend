@@ -5,6 +5,7 @@ import { applicationRepository } from '../../repositories/application.repository
 import { auditLogRepository } from '../../repositories/audit-log.repository.js';
 import { jobModerationRepository } from '../../repositories/job-moderation.repository.js';
 import { jobRepository, type JobFilterParams } from '../../repositories/job.repository.js';
+import { restrictionRepository } from '../../repositories/restriction.repository.js';
 import { cacheService } from '../cache/cache.service.js';
 import { jobPresenter } from '../../presenters/job.presenter.js';
 import type { PaginationInput } from '../../utils/pagination.js';
@@ -99,6 +100,14 @@ export const jobService = {
       submitNow?: boolean;
     },
   ) {
+    const activeRestriction = await restrictionRepository.findActiveRestriction(userId, 'JOB_POSTING');
+    if (activeRestriction) {
+      throw new ApiError(
+        403,
+        `Your job posting privileges are temporarily restricted until ${activeRestriction.endsAt.toISOString()}`,
+        'USER_RESTRICTED',
+      );
+    }
     const isSubmitted = Boolean(input.submitNow);
     const initialStatus = isSubmitted ? 'SUBMITTED' : 'DRAFT';
     const now = new Date();
@@ -270,6 +279,15 @@ export const jobService = {
   },
 
   async submitJob(userId: string, universityId: string, jobId: string) {
+    const activeRestriction = await restrictionRepository.findActiveRestriction(userId, 'JOB_POSTING');
+    if (activeRestriction) {
+      throw new ApiError(
+        403,
+        `Your job posting privileges are temporarily restricted until ${activeRestriction.endsAt.toISOString()}`,
+        'USER_RESTRICTED',
+      );
+    }
+
     const job = await jobRepository.findOwnerJobById(jobId, userId);
     if (!job) throw ApiError.notFound('Job listing');
 

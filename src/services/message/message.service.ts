@@ -6,6 +6,7 @@ import { connectionRepository } from '../../repositories/connection.repository.j
 import { conversationRepository } from '../../repositories/conversation.repository.js';
 import { messageRepository } from '../../repositories/message.repository.js';
 import { privacyRepository } from '../../repositories/privacy.repository.js';
+import { restrictionRepository } from '../../repositories/restriction.repository.js';
 import { userRepository } from '../../repositories/user.repository.js';
 import { mediaService } from '../media/media.service.js';
 import { getSocketServer } from '../../realtime/socket.server.js';
@@ -31,6 +32,15 @@ export const messageService = {
   ): Promise<MessagingEligibility> {
     if (viewerId === targetUserId) {
       return { eligible: false, reason: 'SELF', message: 'You cannot message yourself.' };
+    }
+
+    const activeRestriction = await restrictionRepository.findActiveRestriction(viewerId, 'MESSAGING');
+    if (activeRestriction) {
+      return {
+        eligible: false,
+        reason: 'DISALLOWED',
+        message: `Your messaging privileges are temporarily restricted until ${activeRestriction.endsAt.toISOString()}`,
+      };
     }
 
     const targetUser = await prisma.user.findUnique({
@@ -93,6 +103,15 @@ export const messageService = {
     creatorId: string,
     input: CreateConversationInput,
   ) {
+    const activeRestriction = await restrictionRepository.findActiveRestriction(creatorId, 'MESSAGING');
+    if (activeRestriction) {
+      throw new ApiError(
+        403,
+        `Your messaging privileges are temporarily restricted until ${activeRestriction.endsAt.toISOString()}`,
+        'USER_RESTRICTED',
+      );
+    }
+
     const { targetUserId, initialMessage, contextType, contextId } = input;
 
     const eligibility = await this.checkMessagingEligibility(creatorId, targetUserId, universityId);
@@ -159,6 +178,15 @@ export const messageService = {
     universityId: string,
     input: SendMessageInput,
   ) {
+    const activeRestriction = await restrictionRepository.findActiveRestriction(senderId, 'MESSAGING');
+    if (activeRestriction) {
+      throw new ApiError(
+        403,
+        `Your messaging privileges are temporarily restricted until ${activeRestriction.endsAt.toISOString()}`,
+        'USER_RESTRICTED',
+      );
+    }
+
     const conversation = await conversationRepository.findById(conversationId, senderId);
     if (!conversation) {
       throw ApiError.notFound('Conversation not found.');
