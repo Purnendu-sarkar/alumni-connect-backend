@@ -297,4 +297,32 @@ export const adminController = {
       data: updated,
     });
   }),
+
+  broadcastNotification: asyncHandler(async (request, response) => {
+    const result = await adminService.broadcastNotification({
+      universityId: request.auth!.universityId,
+      actorId: request.auth!.userId,
+      audience: request.body.audience,
+      category: request.body.category,
+      title: request.body.title,
+      message: request.body.message,
+      link: request.body.link,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'] as string | undefined,
+      requestId: request.requestId,
+    });
+    return sendSuccess(response, {
+      statusCode: 201,
+      message: `System broadcast dispatched successfully to ${result.recipientCount} member(s).`,
+      data: result,
+    });
+  }),
+
+  getBroadcastHistory: asyncHandler(async (request, response) => {
+    const history = await adminService.getBroadcastHistory(request.auth!.universityId);
+    return sendSuccess(response, {
+      message: 'Broadcast dispatch history retrieved successfully.',
+      data: history,
+    });
+  }),
 };

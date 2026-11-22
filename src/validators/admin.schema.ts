@@ -127,3 +127,22 @@ export const adminSettingsSchema = z.object({
 });
 
 export type AdminSettingsInput = z.infer<typeof adminSettingsSchema>;
+
+export const broadcastNotificationSchema = z.object({
+  audience: z.enum(['ALL', 'STUDENTS', 'ALUMNI', 'MODERATORS']),
+  category: z
+    .enum(['GENERAL', 'ACADEMIC', 'CAREER', 'EVENT', 'SECURITY_SYSTEM'])
+    .default('GENERAL'),
+  title: z.string().trim().min(5, 'Title must be at least 5 characters.').max(120, 'Title cannot exceed 120 characters.'),
+  message: z.string().trim().min(10, 'Message must be at least 10 characters.').max(1000, 'Message cannot exceed 1000 characters.'),
+  link: z
+    .string()
+    .trim()
+    .max(200, 'Link cannot exceed 200 characters.')
+    .refine((val) => !val || val.startsWith('/'), {
+      message: 'Broadcast link must be a relative internal path starting with "/"',
+    })
+    .optional(),
+});
+
+export type BroadcastNotificationInput = z.infer<typeof broadcastNotificationSchema>;

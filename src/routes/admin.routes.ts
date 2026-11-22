@@ -9,6 +9,7 @@ import {
   adminUsersQuerySchema,
   adminSettingsSchema,
   auditLogQuerySchema,
+  broadcastNotificationSchema,
   changeUserRoleSchema,
   invitationIdParamSchema,
   inviteModeratorSchema,
@@ -243,4 +244,20 @@ adminRouter.patch(
   requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
   validate(adminSettingsSchema),
   adminController.updateSettings,
+);
+
+// System Broadcast Notification Endpoints
+adminRouter.post(
+  '/notifications/broadcast',
+  requireRole('SUPER_ADMIN'),
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  validate(broadcastNotificationSchema),
+  adminController.broadcastNotification,
+);
+
+adminRouter.get(
+  '/notifications/broadcasts',
+  requireRole('SUPER_ADMIN'),
+  requirePermission(PERMISSIONS.UNIVERSITY_MANAGE),
+  adminController.getBroadcastHistory,
 );

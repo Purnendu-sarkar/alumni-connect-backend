@@ -37,7 +37,7 @@ describe('Super Admin User Governance Service Unit Tests', () => {
         auditLogsCount: 150,
       };
 
-      const spy = vi.spyOn(adminRepository, 'getDashboardStats').mockResolvedValue(mockStats);
+      const spy = vi.spyOn(adminRepository, 'getDashboardStats').mockResolvedValue(mockStats as never);
 
       const result = await adminService.getStats('uni-1');
 

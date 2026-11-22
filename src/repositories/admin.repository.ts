@@ -11,9 +11,34 @@ export const adminRepository = {
       approvedUsers,
       pendingVerifications,
       pendingEmailVerifications,
+      suspendedUsers,
+      emailVerifiedCount,
+      adminVerifiedCount,
+      rejectedVerificationCount,
       totalJobs,
       pendingJobs,
+      closedJobs,
+      totalApplications,
+      shortlistedApplications,
+      acceptedApplications,
+      totalEvents,
+      upcomingEvents,
+      totalEventRsvps,
+      totalAnnouncements,
+      publishedStories,
+      openReports,
+      resolvedReports,
+      totalConnections,
+      acceptedConnections,
+      pendingConnections,
+      totalMentorships,
+      activeMentorships,
+      completedMentorships,
+      pendingMentorships,
       auditLogsCount,
+      deptGroups,
+      officialDepts,
+      roles,
     ] = await Promise.all([
       prisma.user.count({ where: { universityId, role: { name: 'STUDENT' } } }),
       prisma.user.count({ where: { universityId, role: { name: 'ALUMNI' } } }),
@@ -43,6 +68,27 @@ export const adminRepository = {
           verified: false,
         },
       }),
+      prisma.user.count({ where: { universityId, isActive: false } }),
+      prisma.user.count({
+        where: {
+          universityId,
+          verified: true,
+          role: { name: { in: ['STUDENT', 'ALUMNI'] } },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          universityId,
+          verificationStatus: 'APPROVED',
+          role: { name: { in: ['STUDENT', 'ALUMNI'] } },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          universityId,
+          verificationStatus: 'REJECTED',
+        },
+      }),
       prisma.job.count({
         where: {
           universityId,
@@ -57,13 +103,126 @@ export const adminRepository = {
           deletedAt: null,
         },
       }),
+      prisma.job.count({
+        where: {
+          universityId,
+          status: 'CLOSED',
+          deletedAt: null,
+        },
+      }),
+      prisma.jobApplication.count({
+        where: { job: { universityId } },
+      }),
+      prisma.jobApplication.count({
+        where: { job: { universityId }, status: 'SHORTLISTED' },
+      }),
+      prisma.jobApplication.count({
+        where: { job: { universityId }, status: 'ACCEPTED' },
+      }),
+      prisma.event.count({
+        where: { universityId, status: 'PUBLISHED' },
+      }),
+      prisma.event.count({
+        where: { universityId, status: 'PUBLISHED', startDate: { gte: new Date() } },
+      }),
+      prisma.eventRsvp.count({
+        where: { event: { universityId }, status: 'GOING' },
+      }),
+      prisma.announcement.count({
+        where: { universityId, status: 'PUBLISHED' },
+      }),
+      prisma.successStory.count({
+        where: { universityId, status: 'PUBLISHED' },
+      }),
+      prisma.report.count({
+        where: { universityId, status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+      }),
+      prisma.report.count({
+        where: { universityId, status: 'RESOLVED' },
+      }),
+      prisma.connection.count({
+        where: { universityId },
+      }),
+      prisma.connection.count({
+        where: { universityId, status: 'ACCEPTED' },
+      }),
+      prisma.connection.count({
+        where: { universityId, status: 'PENDING' },
+      }),
+      prisma.mentorshipRequest.count({
+        where: { universityId },
+      }),
+      prisma.mentorshipRequest.count({
+        where: { universityId, status: { in: ['ACCEPTED', 'ACTIVE'] } },
+      }),
+      prisma.mentorshipRequest.count({
+        where: { universityId, status: 'COMPLETED' },
+      }),
+      prisma.mentorshipRequest.count({
+        where: { universityId, status: { in: ['REQUESTED', 'PENDING'] } },
+      }),
       prisma.auditLog.count({ where: { universityId } }),
+      prisma.user.groupBy({
+        by: ['department', 'roleId'],
+        where: {
+          universityId,
+          department: { not: null },
+        },
+        _count: { id: true },
+      }),
+      prisma.department.findMany({
+        where: { universityId },
+        select: { id: true, code: true, name: true },
+      }),
+      prisma.role.findMany({
+        select: { id: true, name: true },
+      }),
     ]);
 
     const totalUsers = totalStudents + totalAlumni + totalModerators + totalAdmins;
 
+    const studentRoleId = roles.find((r) => r.name === 'STUDENT')?.id;
+    const alumniRoleId = roles.find((r) => r.name === 'ALUMNI')?.id;
+
+    const deptMap = new Map<
+      string,
+      { department: string; code?: string; students: number; alumni: number; total: number }
+    >();
+
+    for (const d of officialDepts) {
+      deptMap.set(d.name, {
+        department: d.name,
+        code: d.code,
+        students: 0,
+        alumni: 0,
+        total: 0,
+      });
+    }
+
+    for (const g of deptGroups) {
+      if (!g.department) continue;
+      const existing = deptMap.get(g.department) || {
+        department: g.department,
+        students: 0,
+        alumni: 0,
+        total: 0,
+      };
+      if (g.roleId === studentRoleId) {
+        existing.students += g._count.id;
+      } else if (g.roleId === alumniRoleId) {
+        existing.alumni += g._count.id;
+      }
+      existing.total = existing.students + existing.alumni;
+      deptMap.set(g.department, existing);
+    }
+
+    const departmentBreakdown = Array.from(deptMap.values())
+      .filter((d) => d.total > 0)
+      .sort((a, b) => b.total - a.total);
+
     return {
       scope: 'PLATFORM',
+      // Backward-compatible keys
       totalUsers,
       totalStudents,
       totalAlumni,
@@ -75,6 +234,46 @@ export const adminRepository = {
       totalJobs,
       pendingJobs,
       auditLogsCount,
+
+      // Enriched Role & Governance metrics
+      totalSuperAdmins: totalAdmins,
+      suspendedUsers,
+
+      // Verification Funnel
+      registeredCount: totalStudents + totalAlumni,
+      emailVerifiedCount,
+      adminVerifiedCount,
+      rejectedVerificationCount,
+
+      // Network & Mentorship Velocity
+      totalConnections,
+      acceptedConnections,
+      pendingConnections,
+      totalMentorships,
+      activeMentorships,
+      completedMentorships,
+      pendingMentorships,
+
+      // Jobs & Applications Pipeline
+      publishedJobs: totalJobs,
+      pendingReviewJobs: pendingJobs,
+      closedJobs,
+      totalApplications,
+      shortlistedApplications,
+      acceptedApplications,
+
+      // Events, Content & Moderation
+      totalEvents,
+      upcomingEvents,
+      totalEventRsvps,
+      totalAnnouncements,
+      publishedStories,
+      openReports,
+      resolvedReports,
+      totalAuditLogs: auditLogsCount,
+
+      // Departmental Campus Breakdown
+      departmentBreakdown,
     };
   },
 
@@ -452,6 +651,39 @@ export const adminRepository = {
         domain: true,
         isActive: true,
         settings: true,
+      },
+    });
+  },
+
+  findActiveUserIdsByRoles(universityId: string, roles: RoleName[]) {
+    return prisma.user.findMany({
+      where: {
+        universityId,
+        isActive: true,
+        role: { name: { in: roles } },
+      },
+      select: { id: true },
+    });
+  },
+
+  createNotificationBatch(notifications: Prisma.NotificationCreateManyInput[]) {
+    return prisma.notification.createMany({
+      data: notifications,
+    });
+  },
+
+  findRecentBroadcastAuditLogs(universityId: string, limit = 20) {
+    return prisma.auditLog.findMany({
+      where: {
+        universityId,
+        action: 'SYSTEM_BROADCAST_SENT',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        actor: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
   },

@@ -509,7 +509,14 @@ export const adminService = {
       const canonical = await universityRepository.findCanonical();
       resolvedUniversityId = canonical?.id || '';
     }
-    return adminRepository.getDashboardStats(resolvedUniversityId);
+
+    const cacheKey = `stats:admin:${resolvedUniversityId}`;
+    const cached = await cacheService.get<Record<string, unknown>>(cacheKey);
+    if (cached) return cached;
+
+    const stats = await adminRepository.getDashboardStats(resolvedUniversityId);
+    await cacheService.set(cacheKey, stats, 120);
+    return stats;
   },
 
   async listAuditLogs(
@@ -1041,5 +1048,99 @@ export const adminService = {
       allowStudentJobApply: mergedSettings.allowStudentJobApply !== false,
       allowAlumniMentorship: mergedSettings.allowAlumniMentorship !== false,
     };
+  },
+
+  async broadcastNotification(input: {
+    universityId: string;
+    actorId: string;
+    audience: 'ALL' | 'STUDENTS' | 'ALUMNI' | 'MODERATORS';
+    category: string;
+    title: string;
+    message: string;
+    link?: string;
+    ip?: string;
+    userAgent?: string;
+    requestId?: string;
+  }) {
+    const roleMap: Record<'ALL' | 'STUDENTS' | 'ALUMNI' | 'MODERATORS', RoleName[]> = {
+      ALL: ['STUDENT', 'ALUMNI', 'MODERATOR'],
+      STUDENTS: ['STUDENT'],
+      ALUMNI: ['ALUMNI'],
+      MODERATORS: ['MODERATOR'],
+    };
+
+    const targetRoles = roleMap[input.audience] || ['STUDENT', 'ALUMNI', 'MODERATOR'];
+    const recipients = await adminRepository.findActiveUserIdsByRoles(
+      input.universityId,
+      targetRoles,
+    );
+
+    const CHUNK_SIZE = 250;
+    const cleanLink = input.link && input.link.trim().length > 0 ? input.link.trim() : null;
+
+    for (let i = 0; i < recipients.length; i += CHUNK_SIZE) {
+      const chunk = recipients.slice(i, i + CHUNK_SIZE);
+      const batchRecords: Prisma.NotificationCreateManyInput[] = chunk.map((u) => ({
+        userId: u.id,
+        type: 'SYSTEM_ANNOUNCEMENT' as const,
+        title: input.title,
+        body: input.message,
+        link: cleanLink,
+        metadata: {
+          category: input.category,
+          audience: input.audience,
+          broadcastBy: input.actorId,
+        },
+      }));
+
+      await adminRepository.createNotificationBatch(batchRecords);
+      await Promise.all(chunk.map((u) => cacheService.del(`user:${u.id}:notif_unread`)));
+    }
+
+    await auditLogRepository.record({
+      universityId: input.universityId,
+      actorId: input.actorId,
+      action: 'SYSTEM_BROADCAST_SENT',
+      targetType: 'system',
+      targetId: input.universityId,
+      ip: input.ip,
+      userAgent: input.userAgent,
+      requestId: input.requestId,
+      metadata: {
+        audience: input.audience,
+        category: input.category,
+        title: input.title,
+        recipientCount: recipients.length,
+        link: cleanLink,
+      },
+    });
+
+    return {
+      recipientCount: recipients.length,
+      audience: input.audience,
+      title: input.title,
+      sentAt: new Date().toISOString(),
+    };
+  },
+
+  async getBroadcastHistory(universityId: string) {
+    const logs = await adminRepository.findRecentBroadcastAuditLogs(universityId, 30);
+    return logs.map((l) => {
+      const meta = (l.metadata && typeof l.metadata === 'object' ? l.metadata : {}) as Record<
+        string,
+        unknown
+      >;
+      return {
+        id: l.id,
+        sentAt: l.createdAt.toISOString(),
+        senderName: l.actor?.name || 'Super Admin',
+        senderEmail: l.actor?.email || null,
+        audience: (meta.audience as 'ALL' | 'STUDENTS' | 'ALUMNI' | 'MODERATORS') || 'ALL',
+        category: (meta.category as string) || 'GENERAL',
+        title: (meta.title as string) || 'Institutional Broadcast',
+        recipientCount: typeof meta.recipientCount === 'number' ? meta.recipientCount : 0,
+        link: (meta.link as string) || null,
+      };
+    });
   },
 };
