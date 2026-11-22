@@ -123,7 +123,7 @@ export const adminRepository = {
         where: { universityId, status: 'PUBLISHED' },
       }),
       prisma.event.count({
-        where: { universityId, status: 'PUBLISHED', startDate: { gte: new Date() } },
+        where: { universityId, status: 'PUBLISHED', startsAt: { gte: new Date() } },
       }),
       prisma.eventRsvp.count({
         where: { event: { universityId }, status: 'GOING' },
