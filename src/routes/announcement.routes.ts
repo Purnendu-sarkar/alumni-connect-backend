@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { announcementController } from '../controllers/announcement.controller.js';
-import { optionalAuthenticate } from '../middlewares/auth.middleware.js';
+import { authenticate, optionalAuthenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import {
   announcementIdParamSchema,
@@ -21,7 +21,7 @@ announcementRouter.get(
 // Get single announcement detail
 announcementRouter.get(
   '/:id',
-  optionalAuthenticate,
+  authenticate,
   validate(announcementIdParamSchema, 'params'),
   announcementController.getById
 );

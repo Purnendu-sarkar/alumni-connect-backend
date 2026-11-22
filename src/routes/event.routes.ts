@@ -29,7 +29,7 @@ eventRouter.get(
 // Get single event detail
 eventRouter.get(
   '/:id',
-  optionalAuthenticate,
+  authenticate,
   validate(eventIdParamSchema, 'params'),
   eventController.getById
 );

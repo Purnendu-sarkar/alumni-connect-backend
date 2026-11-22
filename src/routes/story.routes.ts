@@ -92,10 +92,10 @@ storyRouter.delete(
   storyController.delete
 );
 
-// Reader / Public: Get story detail by ID or Slug
+// Reader / Authenticated: Get story detail by ID or Slug
 storyRouter.get(
   '/:id',
-  optionalAuthenticate,
+  authenticate,
   validate(storyIdParamSchema, 'params'),
   storyController.getDetail
 );

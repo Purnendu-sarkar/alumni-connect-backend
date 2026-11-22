@@ -59,6 +59,7 @@ jobRouter.post(
 // Get single job detail by ID
 jobRouter.get(
   '/:id',
+  authenticate,
   validate(jobIdParamSchema, 'params'),
   jobController.getById,
 );
